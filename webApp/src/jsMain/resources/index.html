@@ -2,22 +2,26 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GolfCat Team</title>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        /* 強制使用系統預設繁體中文字體，解決框框亂碼問題 */
-        body {
+        html, body {
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang TC", "Microsoft JhengHei", Arial, sans-serif;
-            height: 100vh;
-            width: 100vw;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            background-color: #FAFAFA;
+            /* 這是給一般 HTML 的，Canvas 需要內部處理 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
         }
     </style>
 </head>
 <body>
+    <div id="loading" style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+        <p>系統啟動中...</p>
+    </div>
     <script type="application/javascript" src="webApp.js"></script>
 </body>
 </html>
