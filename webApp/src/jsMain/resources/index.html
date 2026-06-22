@@ -2,25 +2,24 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>GolfCat Team</title>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #FAFAFA;
-            /* 這是給一般 HTML 的，Canvas 需要內部處理 */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #FAFAFA;
+            /* 強制讓瀏覽器渲染中文字體，幫助 Canvas 識別 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
         }
+        #app-root { width: 100%; height: 100%; }
     </style>
 </head>
 <body>
-    <div id="loading" style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-        <p>系統啟動中...</p>
+    <div id="app-root">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; color: #666;">
+            <p id="status-text">系統初始化中...</p>
+        </div>
     </div>
     <script type="application/javascript" src="webApp.js"></script>
 </body>
