@@ -10,6 +10,7 @@ import kotlinx.serialization.json.*
 import org.golfcat.team.project.models.Event
 
 class LineMessagingService {
+    // 建立獨立的 HttpClient，避免型別衝突
     private val httpClient = HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -27,7 +28,7 @@ class LineMessagingService {
         
         return try {
             val response: HttpResponse = httpClient.post("https://api.line.me/v2/bot/message/push") {
-                header(HttpHeaders.Authorization, "Bearer $channelAccessToken")
+                header("Authorization", "Bearer $channelAccessToken")
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject {
                     put("to", to)
@@ -42,7 +43,6 @@ class LineMessagingService {
             }
             response.status.isSuccess()
         } catch (e: Exception) {
-            println("Line Messaging Error: $e")
             false
         }
     }
@@ -68,15 +68,6 @@ class LineMessagingService {
                         put("size", "xl")
                         put("margin", "md")
                     })
-                    add(buildJsonObject {
-                        put("type", "box")
-                        put("layout", "vertical")
-                        put("margin", "lg")
-                        putJsonArray("contents") {
-                            add(buildDataRow("日期", event.date))
-                            add(buildDataRow("地點", event.location))
-                        }
-                    })
                 }
             }
             putJsonObject("footer") {
@@ -94,31 +85,6 @@ class LineMessagingService {
                         put("color", "#133B2B")
                     })
                 }
-            }
-        }
-    }
-
-    private fun buildDataRow(label: String, value: String): JsonObject {
-        return buildJsonObject {
-            put("type", "box")
-            put("layout", "baseline")
-            put("spacing", "sm")
-            putJsonArray("contents") {
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", label)
-                    put("color", "#aaaaaa")
-                    put("size", "sm")
-                    put("flex", 1)
-                })
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", value)
-                    put("wrap", true)
-                    put("color", "#666666")
-                    put("size", "sm")
-                    put("flex", 5)
-                })
             }
         }
     }

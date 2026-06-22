@@ -2,6 +2,7 @@ package org.golfcat.team.project
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
+import kotlinx.browser.document
 import kotlinx.browser.window
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -10,6 +11,7 @@ fun main() {
     val liffId = "2010382913-rCaKoQcE"
     
     if (liff == null || liff == undefined) {
+        console.warn("LIFF 載入失敗，進入測試模式")
         startComposeApp()
         return
     }
@@ -21,14 +23,15 @@ fun main() {
             startComposeApp()
         }
     }, { err ->
-        console.error("LIFF Init Error", err)
+        console.error("LIFF 初始化錯誤", err)
         startComposeApp()
     })
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 private fun startComposeApp() {
-    ComposeViewport(window.document.body!!) {
+    // 解決點擊無效：直接掛載到 body
+    ComposeViewport(document.body!!) {
         App()
     }
 }
