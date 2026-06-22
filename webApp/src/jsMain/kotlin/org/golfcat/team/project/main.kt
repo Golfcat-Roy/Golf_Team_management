@@ -4,6 +4,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.w3c.dom.HTMLBodyElement
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -16,7 +17,6 @@ fun main() {
 
     val liffId = "2010382913-rCaKoQcE"
     
-    // 使用更簡單的對象定義
     val initConfig = kotlin.js.json("liffId" to liffId)
     
     liff.init(initConfig).then({
@@ -26,14 +26,14 @@ fun main() {
             startComposeApp()
         }
     }, { err ->
+        console.error("LIFF Init Error", err)
         startComposeApp()
     })
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 private fun startComposeApp() {
-    // 確保 body 存在後再載入
-    val body = document.body
+    val body = document.body as? HTMLBodyElement
     if (body != null) {
         ComposeViewport(body) {
             App()
