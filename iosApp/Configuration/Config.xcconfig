@@ -1,0 +1,7 @@
+TEAM_ID=
+
+PRODUCT_NAME=Golf_Team_management
+PRODUCT_BUNDLE_IDENTIFIER=org.golfcat.team.project.Golf_Team_management$(TEAM_ID)
+
+CURRENT_PROJECT_VERSION=1
+MARKETING_VERSION=1.0
