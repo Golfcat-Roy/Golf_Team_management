@@ -4,21 +4,21 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.w3c.dom.HTMLDivElement
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     val liff = window.asDynamic().liff
+    
+    // 初始化時先移除 loading 狀態
+    val liffId = "2010382913-rCaKoQcE"
     
     if (liff == null || liff == undefined) {
         startComposeApp()
         return
     }
 
-    val liffId = "2010382913-rCaKoQcE"
-    
-    val initConfig = kotlin.js.json("liffId" to liffId)
-    
-    liff.init(initConfig).then({
+    liff.init(kotlin.js.json("liffId" to liffId)).then({
         if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
             liff.login()
         } else {
@@ -32,10 +32,17 @@ fun main() {
 
 @OptIn(ExperimentalComposeUiApi::class)
 private fun startComposeApp() {
-    val body = document.body
-    if (body != null) {
-        ComposeViewport(body) {
+    val container = document.getElementById("compose-target") as? HTMLDivElement
+    if (container != null) {
+        ComposeViewport(container) {
             App()
+        }
+    } else {
+        // Fallback to body
+        document.body?.let {
+            ComposeViewport(it) {
+                App()
+            }
         }
     }
 }

@@ -5,11 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GolfCat Team</title>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        #compose-target {
+            height: 100%;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-    <div id="loading" style="text-align: center; margin-top: 50px;">
-        <p>Loading GolfCat...</p>
-    </div>
+    <div id="compose-target"></div>
+    <!-- 使用相對路徑，讓 GitHub Pages 能正確找到 JS -->
     <script type="application/javascript" src="webApp.js"></script>
 </body>
 </html>
