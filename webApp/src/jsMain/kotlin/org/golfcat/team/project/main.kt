@@ -29,13 +29,13 @@ fun main() {
         if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
             liff.login()
         } else {
-            // 在進入 Compose 之前就先拿好 Profile，避開 Kotlin 的 await() 錯誤
-            liff.getProfile().then({ profile ->
-                val p = profile.asDynamic()
+            // 使用最安全的 unsafeCast 避免 asDynamic 崩潰
+            liff.getProfile().then({ profile: Any ->
+                val p = profile.unsafeCast<dynamic>()
                 AuthManager.setUser(User(
-                    lineUid = p.userId as String,
-                    lineDisplayName = p.displayName as String,
-                    realName = p.displayName as String,
+                    lineUid = p.userId.unsafeCast<String>(),
+                    lineDisplayName = p.displayName.unsafeCast<String>(),
+                    realName = p.displayName.unsafeCast<String>(),
                     initialHandicap = 36.0,
                     isSuperAdmin = false
                 ))
@@ -44,7 +44,8 @@ fun main() {
                 launchApp() 
             })
         }
-    }, { err ->
+    }, { err: Any ->
+        console.error("LIFF Init Error", err)
         launchApp()
     })
 }
