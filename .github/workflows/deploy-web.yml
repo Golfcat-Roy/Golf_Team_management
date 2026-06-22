@@ -13,9 +13,9 @@ jobs:
           distribution: 'temurin'
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - run: ./gradlew :webApp:jsBrowserDistribution
+      - name: Build with Gradle
+        run: ./gradlew :webApp:jsBrowserDistribution --stacktrace --info
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: webApp/build/dist/js/productionExecutable
           branch: gh-pages
-

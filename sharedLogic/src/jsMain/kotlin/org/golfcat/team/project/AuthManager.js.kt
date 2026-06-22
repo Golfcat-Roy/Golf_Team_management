@@ -2,24 +2,25 @@ package org.golfcat.team.project
 
 import org.golfcat.team.project.models.User
 import kotlinx.coroutines.await
+import kotlinx.browser.window
 
 actual suspend fun loginWithLine(): User? {
-    if (!liff.isLoggedIn()) {
-        liff.login()
+    val liff = window.asDynamic().liff
+    if (liff == null || !liff.isLoggedIn().unsafeCast<Boolean>()) {
+        liff?.login()
         return null
     }
     
     return try {
-        val profile = liff.getProfile().await()
+        val profile = liff.getProfile().await().asDynamic()
         User(
-            lineUid = profile.userId,
-            lineDisplayName = profile.displayName,
-            realName = profile.displayName,
+            lineUid = profile.userId as String,
+            lineDisplayName = profile.displayName as String,
+            realName = profile.displayName as String,
             initialHandicap = 36.0,
             isSuperAdmin = false
         )
     } catch (e: Exception) {
-        println("LIFF getProfile error: $e")
         null
     }
 }
