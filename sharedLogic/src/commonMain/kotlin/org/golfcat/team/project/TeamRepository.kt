@@ -125,6 +125,13 @@ class TeamRepository(private val customClient: io.github.jan.supabase.SupabaseCl
         return team
     }
 
+    private val messagingService = LineMessagingService()
+    private val targetGroupId = "C7ed03dcb085bcbb184252d6f3c77f6a4"
+
+    suspend fun broadcastEventToLine(event: Event): Boolean {
+        return messagingService.sendEventFlexMessage(targetGroupId, event)
+    }
+
     suspend fun createEvent(
         teamId: String,
         location: String,
