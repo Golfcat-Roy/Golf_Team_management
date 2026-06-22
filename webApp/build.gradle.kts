@@ -8,15 +8,22 @@ plugins {
 
 kotlin {
     js {
-        browser()
+        browser {
+            commonWebpackConfig {
+                outputFileName = "webApp.js"
+            }
+        }
         binaries.executable()
     }
 
+    // 暫時註解掉 wasmJs 以確保編譯穩定
+    /*
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
         binaries.executable()
     }
+    */
 
     sourceSets {
         commonMain.dependencies {
