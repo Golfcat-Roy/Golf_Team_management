@@ -6,8 +6,13 @@ import kotlinx.browser.window
 
 actual suspend fun loginWithLine(): User? {
     val liff = window.asDynamic().liff
-    if (liff == null || !liff.isLoggedIn().unsafeCast<Boolean>()) {
-        liff?.login()
+    if (liff == null) {
+        window.alert("錯誤: 找不到 LIFF SDK")
+        return null
+    }
+    
+    if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
+        liff.login()
         return null
     }
     
@@ -21,6 +26,7 @@ actual suspend fun loginWithLine(): User? {
             isSuperAdmin = false
         )
     } catch (e: Exception) {
+        window.alert("登入過程發生異常: " + e.message)
         null
     }
 }
