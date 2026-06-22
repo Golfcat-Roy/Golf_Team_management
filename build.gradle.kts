@@ -8,3 +8,9 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.kotlinx.serialization) apply false
 }
+
+allprojects {
+    configurations.all {
+        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+    }
+}
