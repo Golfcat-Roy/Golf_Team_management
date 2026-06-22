@@ -22,10 +22,12 @@ kotlin {
         browser()
     }
     
+    /*
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
     }
+    */
     
     androidLibrary {
        namespace = "org.golfcat.team.project.sharedLogic"
@@ -74,8 +76,10 @@ kotlin {
             implementation(libs.wrappers.browser)
             implementation(libs.ktor.client.js)
         }
+        /*
         wasmJsMain.dependencies {
             implementation(libs.ktor.client.js)
         }
+        */
     }
 }

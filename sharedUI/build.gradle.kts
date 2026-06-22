@@ -13,10 +13,12 @@ kotlin {
         browser()
     }
     
+    /*
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
     }
+    */
     
     androidLibrary {
        namespace = "org.golfcat.team.project.sharedUI"
