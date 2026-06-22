@@ -11,6 +11,8 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Make gradlew executable
+        run: chmod +x gradlew
       - run: ./gradlew :webApp:jsBrowserDistribution
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
