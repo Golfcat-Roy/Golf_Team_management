@@ -11,7 +11,6 @@ fun main() {
     val liffId = "2010382913-rCaKoQcE"
     
     if (liff == null || liff == undefined) {
-        console.warn("LIFF 載入失敗，進入測試模式")
         startComposeApp()
         return
     }
@@ -23,15 +22,17 @@ fun main() {
             startComposeApp()
         }
     }, { err ->
-        console.error("LIFF 初始化錯誤", err)
         startComposeApp()
     })
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 private fun startComposeApp() {
-    // 解決點擊無效：直接掛載到 body
-    ComposeViewport(document.body!!) {
-        App()
+    // 確保掛載到 document.body
+    val body = document.body
+    if (body != null) {
+        ComposeViewport(body) {
+            App()
+        }
     }
 }
