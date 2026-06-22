@@ -11,10 +11,10 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Make gradlew executable
-        run: chmod +x gradlew
       - name: Build with Gradle
-        run: ./gradlew clean :webApp:jsBrowserDistribution --stacktrace --info --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew clean :webApp:jsBrowserDistribution --no-daemon --no-configuration-cache --stacktrace
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: webApp/build/dist/js/productionExecutable
