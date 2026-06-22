@@ -1,13 +1,24 @@
 package org.golfcat.team.project
 
 import io.ktor.client.*
+import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.*
 import org.golfcat.team.project.models.Event
 
-class LineMessagingService(private val httpClient: HttpClient = supabase.httpClient) {
+class LineMessagingService {
+    private val httpClient = HttpClient {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            })
+        }
+    }
+    
     private val channelAccessToken = "f5e/TiPoSGFdTPnyTAczbVairsL314Zs0lggxmWb5ESHPJ9aMvyJtgGJ1USdObEzX1o4xhh746q5rIJdIuetRCseGVMkpzM2QHLUDpHoXqK4dstg/Uq0NDpr+4yPkn9lODepvnY1wnb/qGV6fBfrYQdB04t89/1O/w1cDnyilFU="
     private val liffUrl = "https://liff.line.me/2010382913-rCaKoQcE"
 
@@ -37,7 +48,6 @@ class LineMessagingService(private val httpClient: HttpClient = supabase.httpCli
     }
 
     private fun buildEventFlexJson(event: Event): JsonObject {
-        // 這是一個簡化版的 Flex Message JSON 結構
         return buildJsonObject {
             put("type", "bubble")
             putJsonObject("body") {
