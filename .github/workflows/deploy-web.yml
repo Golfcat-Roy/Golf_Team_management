@@ -14,7 +14,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
       - name: Build with Gradle
-        run: ./gradlew :webApp:jsBrowserDistribution --stacktrace --info --no-daemon
+        run: ./gradlew clean :webApp:jsBrowserDistribution --stacktrace --info --no-daemon
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: webApp/build/dist/js/productionExecutable
