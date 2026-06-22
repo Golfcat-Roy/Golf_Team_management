@@ -7,17 +7,20 @@ import kotlinx.browser.window
 actual suspend fun loginWithLine(): User? {
     val liff = window.asDynamic().liff
     if (liff == null) {
-        window.alert("錯誤: 找不到 LIFF SDK")
+        console.error("AuthManager: LIFF SDK not found")
         return null
     }
     
     if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
+        console.log("AuthManager: User not logged in, calling liff.login()")
         liff.login()
         return null
     }
     
     return try {
+        console.log("AuthManager: Fetching profile...")
         val profile = liff.getProfile().await().asDynamic()
+        console.log("AuthManager: Profile fetched for ${profile.displayName}")
         User(
             lineUid = profile.userId as String,
             lineDisplayName = profile.displayName as String,
@@ -26,7 +29,7 @@ actual suspend fun loginWithLine(): User? {
             isSuperAdmin = false
         )
     } catch (e: Exception) {
-        window.alert("登入過程發生異常: " + e.message)
+        console.error("AuthManager: Error fetching profile: ${e.message}")
         null
     }
 }
