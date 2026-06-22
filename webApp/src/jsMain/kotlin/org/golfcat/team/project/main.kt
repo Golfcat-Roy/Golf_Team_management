@@ -4,7 +4,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import kotlinx.browser.document
 import kotlinx.browser.window
-import org.w3c.dom.HTMLBodyElement
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -33,7 +32,7 @@ fun main() {
 
 @OptIn(ExperimentalComposeUiApi::class)
 private fun startComposeApp() {
-    val body = document.body as? HTMLBodyElement
+    val body = document.body
     if (body != null) {
         ComposeViewport(body) {
             App()

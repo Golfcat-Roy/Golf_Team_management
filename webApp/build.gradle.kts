@@ -16,18 +16,13 @@ kotlin {
         binaries.executable()
     }
 
-    // 暫時註解掉 wasmJs 以確保編譯穩定
-    /*
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
-        binaries.executable()
-    }
-    */
-
     sourceSets {
         commonMain.dependencies {
             implementation(projects.sharedUI)
+            implementation(libs.compose.runtime)
+            implementation(libs.compose.ui)
+            implementation(libs.compose.foundation)
+            implementation(libs.compose.material3)
         }
     }
 }
