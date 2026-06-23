@@ -40,21 +40,28 @@
 
 <script>
     // ==========================================
-    // 🛠️ 請填入你自己的 Supabase 設定資料
+    // 🛠️ Supabase 設定資料
     // ==========================================
-    const SUPABASE_URL = "https://你的_SUPABASE_URL.supabase.co";
-    const SUPABASE_ANON_KEY = "你的_SUPABASE_ANON_KEY";
+    const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
 
-    // 正確初始化 Supabase 客戶端
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+    let supabaseClient = null;
     let userProfile = null;
 
     // ==========================================
-    // 1. 初始化 LINE LIFF
+    // 1. 初始化 LINE LIFF 與 資料庫
     // ==========================================
     async function initLiff() {
         try {
+            // 💡 安全檢查：確保外部 Supabase SDK 已經就緒才初始化，防止全域死鎖
+            if (window.supabase) {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            } else {
+                document.getElementById('loading-status').innerText = "資料庫元件載入失敗，請重新整理網頁。";
+                return;
+            }
+
+            // 初始化 LIFF
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
 
             if (!liff.isLoggedIn()) {
@@ -68,27 +75,24 @@
             }
         } catch (error) {
             console.error("LIFF 初始化失敗:", error);
-            document.getElementById('loading-status').innerText = "LINE 登入失敗，請於 LINE 內開啟。";
+            document.getElementById('loading-status').innerText = "LINE 登入失敗或環境錯誤: " + error.message;
         }
     }
 
     // ==========================================
-    // 2. 從真實資料表（events、event_registrations）撈取資料
+    // 2. 從真實資料表撈取資料
     // ==========================================
     async function fetchTournaments() {
         try {
-            // 👉 1. 撈取所有球賽（對應你的 'events' 資料表）
-            // 💡 註：此處假設排序欄位為 'date'。如果你的日期欄位叫作 'created_at' 或其他名字，請修改 order() 內單字
-            const { data: events, error } = await supabase
+            // 撈取所有球賽（對應你的 'events' 資料表）
+            const { data: events, error } = await supabaseClient
                 .from('events')
-                .select('*')
-                .order('date', { ascending: false });
+                .select('*');
 
             if (error) throw error;
 
-            // 👉 2. 撈取目前使用者的報名紀錄（對應你的 'event_registrations' 資料表）
-            // 💡 註：此處假設欄位名稱為 'line_user_id'。如果你的欄位是用 uuid 關聯到 users 表，請調整 .eq() 的條件
-            const { data: myRegistrations, regError } = await supabase
+            // 撈取目前使用者的報名紀錄（對應你的 'event_registrations' 資料表）
+            const { data: myRegistrations, regError } = await supabaseClient
                 .from('event_registrations')
                 .select('event_id')
                 .eq('line_user_id', userProfile.userId);
@@ -123,9 +127,7 @@
         }
 
         events.forEach(event => {
-            // 判斷當前使用者是否已經報名此賽事
             const isRegistered = registeredEventIds.has(event.id);
-
             const card = document.createElement('div');
             card.className = "border border-slate-200 rounded-xl p-4 bg-white shadow-xs space-y-3";
 
@@ -159,9 +161,7 @@
                 `;
             }
 
-            // 💡 欄位對接提示：
-            // 如果你的 events 表內，賽事名稱不叫 'title' 而是叫 'name'，請把下面 ${event.title} 改為 ${event.name}
-            // 如果球場欄位不叫 'location' 而是叫 'venue' 或 'course'，請做對應更換
+            // 💡 欄位名稱映射：如果畫面欄位空白，請將 event.title / event.date / event.location 換成你 events 表裡的真實欄位名
             card.innerHTML = `
                 <div class="flex justify-between items-center border-b border-slate-100 pb-2">
                     <span class="font-bold text-slate-800 text-base">${event.title || '例行賽'} - ${event.date || ''}</span>
@@ -185,8 +185,7 @@
         try {
             if(!confirm("確定要報名此場賽事嗎？")) return;
 
-            // 寫入資料到 'event_registrations' 資料表
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('event_registrations')
                 .insert([
                     {
@@ -212,7 +211,7 @@
         try {
             if(!confirm("確定要取消報名嗎？")) return;
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('event_registrations')
                 .delete()
                 .eq('event_id', eventId)
@@ -231,9 +230,10 @@
     function viewGroups(eventId) { alert("查看分組名單功能開發中，活動ID: " + eventId); }
     function enterScore(eventId) { alert("成績登錄功能開發中，活動ID: " + eventId); }
 
-    window.onload = function() {
+    // 確保頁面 DOM 與 CDN 完全加載完畢後才執行
+    window.addEventListener('load', function() {
         initLiff();
-    };
+    });
 </script>
 </body>
 </html>
