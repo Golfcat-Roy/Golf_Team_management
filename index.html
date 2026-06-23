@@ -360,16 +360,32 @@
                 });
             });
 
-            // 2. 獲取球隊歷史
-            const { data: teamHistory } = await supabaseClient
+            // 2. 獲取球隊歷史 (對齊 App 方案攔截邏輯)
+            let query = supabaseClient
                 .from('events')
                 .select('*')
                 .eq('team_id', state.activeTeam.id)
                 .eq('registration_status', 'closed')
                 .order('date', { ascending: false });
 
+            // 若為免費版，限制顯示 2 場 (100% 移植 App 限制)
+            if (state.activeTeam.subscription_type === 'free') {
+                query = query.limit(2);
+            }
+
+            const { data: teamHistory } = await query;
+
             hideLoading();
             const container = document.getElementById('page-container');
+
+            let upgradePromptHtml = '';
+            if (state.activeTeam.subscription_type === 'free' && teamHistory?.length >= 2) {
+                upgradePromptHtml = `
+                    <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-6">
+                        <p class="text-[10px] text-amber-700 leading-relaxed font-medium">💡 目前為免費版，僅顯示最近 2 場賽事。升級 Pro 版可解除限制並查看完整歷史紀錄。</p>
+                    </div>
+                `;
+            }
 
             // 渲染頂部個人統計卡片 (對齊 App)
             let statsHtml = `
@@ -428,6 +444,7 @@
                     <div class="flex items-center justify-between mb-4 px-1">
                         <h4 class="text-[11px] font-black text-gray-400 uppercase tracking-widest">球隊歷史 (Team History)</h4>
                     </div>
+                    ${upgradePromptHtml}
                     <div>${teamListHtml}</div>
 
                     <div id="scorecard-modal" class="hidden fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm"></div>
@@ -545,6 +562,7 @@
                                     ${isStarted ? '結束球賽' : '開始球賽'}
                                 </button>
                                 <button onclick="onNavigateToCreateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-bold">變更資訊</button>
+                                <button onclick="onDuplicateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100">複製賽事</button>
                             </div>
                         </div>
                     `;
@@ -1106,7 +1124,32 @@
         }
     }
 
+    async function onDuplicateEvent(teamId, sourceEventId) {
+        showLoading("正在複製賽事設定...");
+        try {
+            const { data: source } = await supabaseClient.from('events').select('*').eq('id', sourceEventId).single();
+            // 模仿 App：複製除了 ID 和日期以外的所有資訊
+            const duplicateData = {
+                ...source,
+                title: `${source.location} 複製賽`,
+                date: new Date().toISOString().split('T')[0] // 預設今天
+            };
+            delete duplicateData.id;
+            delete duplicateData.created_at;
+
+            renderCreateEvent(teamId, duplicateData);
+            hideLoading();
+        } catch (err) { alert("複製失敗"); hideLoading(); }
+    }
+
+    function triggerHaptic() {
+        if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(10); // 模仿 App 的輕微觸感
+        }
+    }
+
     function updateHoleScore(memberId, delta) {
+        triggerHaptic();
         let val = state.scoring.playerScores[memberId][state.scoring.currentHole - 1];
         if (val === 0) val = state.scoring.eventPars[state.scoring.currentHole-1];
         val += delta;
