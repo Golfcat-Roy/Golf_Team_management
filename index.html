@@ -2,271 +2,234 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GolfCat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>GolfCat - 球隊管理</title>
 
+    <!-- 外部資源 -->
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
-    <script>var vConsole = new window.VConsole();</script>
-
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Noto Sans TC', sans-serif; }
+        :root {
+            --primary: #133B2B;
+            --secondary: #2E7D32;
+            --background: #FAFAFA;
+            --surface: #FAFAFA;
+            --on-background: #1A1A1A;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--background);
+            color: var(--on-background);
+            margin: 0; padding: 0;
+            height: 100vh; width: 100vw;
+            overflow: hidden;
+        }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .active-tab { color: #10B981 !important; opacity: 1 !important; }
+        .tab-indicator { height: 4px; width: 40px; background-color: #10B981; border-radius: 2px; position: absolute; top: 0; }
+
+        /* 模擬 App 切換動畫 */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="bg-[#F3F4F6] text-slate-800 antialiased">
+<body class="antialiased">
 
-<div class="max-w-md mx-auto h-screen bg-[#F9FAFB] flex flex-col relative shadow-xl border-x border-slate-200">
+<!-- 主要容器：限制最大寬度模擬手機感 -->
+<div class="max-w-md mx-auto h-screen bg-white flex flex-col relative shadow-2xl border-x border-gray-100">
 
-    <header class="bg-[#04432C] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0">
-        SuperGolfCat
+    <!-- Header (對齊 App 標題列) -->
+    <header id="app-header" class="bg-[#133B2B] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-6">
+        <div class="w-6"></div> <!-- 佔位符 -->
+        <span id="header-title">GolfCat</span>
+        <div id="header-action" class="w-6 text-xl">
+             <!-- 右側動作按鈕，如 + 號 -->
+        </div>
     </header>
 
-    <main id="main-content" class="flex-1 p-4 space-y-4 overflow-y-auto no-scrollbar pb-24">
-        <div id="loading-status" class="text-center text-slate-500 py-12 text-sm font-medium">
-            正在安全驗證 LINE 帳號...
+    <!-- 主內容區 (對齊 App 各個 Screen) -->
+    <main id="main-content" class="flex-1 overflow-y-auto no-scrollbar pb-20 bg-[#FAFAFA]">
+        <div id="loading-screen" class="flex flex-col items-center justify-center h-full space-y-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#133B2B]"></div>
+            <p class="text-gray-500 text-sm">正在同步球員資料...</p>
         </div>
-        <div id="tournament-list" class="space-y-4"></div>
+        <div id="page-container" class="hidden p-4 space-y-4">
+            <!-- 頁面內容將由 JavaScript 動態插入 -->
+        </div>
     </main>
 
-    <nav class="absolute bottom-0 left-0 right-0 bg-[#04432C] h-16 flex items-center justify-around text-white shadow-lg border-t border-emerald-900 z-50">
-        <div class="flex flex-col items-center justify-center w-full h-full relative cursor-pointer">
-            <div class="absolute top-1 w-10 h-1 bg-[#10B981] rounded-full"></div>
-            <span class="text-xs font-bold mt-2 text-[#10B981]">賽事</span>
+    <!-- Bottom Navigation (對齊 App 的五個 Tab) -->
+    <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-[#133B2B] h-16 flex items-center justify-around text-white shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50">
+        <div onclick="switchTab(0)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
+            <div class="tab-indicator hidden"></div>
+            <span class="text-[10px] mt-1">賽事</span>
         </div>
-        <div class="flex flex-col items-center justify-center w-full h-full relative opacity-60">
-            <span class="text-xs font-medium mt-2">球隊</span>
+        <div onclick="switchTab(1)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
+            <div class="tab-indicator hidden"></div>
+            <span class="text-[10px] mt-1">球隊</span>
         </div>
-        <div class="flex flex-col items-center justify-center w-full h-full relative opacity-60">
-            <span class="text-xs font-medium mt-2">分組</span>
+        <div onclick="switchTab(2)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
+            <div class="tab-indicator hidden"></div>
+            <span class="text-[10px] mt-1">分組</span>
         </div>
-        <div class="flex flex-col items-center justify-center w-full h-full relative opacity-60">
-            <span class="text-xs font-medium mt-2">成績</span>
+        <div onclick="switchTab(3)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
+            <div class="tab-indicator hidden"></div>
+            <span class="text-[10px] mt-1">成績</span>
         </div>
-        <div class="flex flex-col items-center justify-center w-full h-full relative opacity-60">
-            <span class="text-xs font-medium mt-2">我的</span>
+        <div onclick="switchTab(4)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
+            <div class="tab-indicator hidden"></div>
+            <span class="text-[10px] mt-1">我的</span>
         </div>
     </nav>
 </div>
 
 <script>
+    // --- 配置與狀態 ---
     const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
-
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    let userProfile = null;
-    let globalMemberId = null; // 儲存最終對齊的球員 UUID
 
-    async function initLiff() {
+    let state = {
+        userProfile: null, // LINE Profile
+        dbUser: null,      // Supabase User
+        currentTab: 0,
+        myTeams: [],
+        activeTeam: null
+    };
+
+    // --- 初始化 ---
+    async function initApp() {
         try {
-            if (!window.supabase) {
-                document.getElementById('loading-status').innerText = "資料庫模組載入失敗，請刷新網頁。";
-                return;
-            }
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
-
             if (!liff.isLoggedIn()) {
                 liff.login();
-            } else {
-                userProfile = await liff.getProfile();
-                console.log("LINE 驗證成功:", userProfile.displayName);
-                document.getElementById('loading-status').innerText = "正在解析球員識別碼...";
-
-                // 執行核心識別碼轉換，取得球員的真實 UUID
-                await prepareUserIdentifiers();
-            }
-        } catch (error) {
-            console.error("LIFF 錯誤:", error);
-            document.getElementById('loading-status').innerText = "安全登入失敗: " + error.message;
-        }
-    }
-
-    // 核心密鑰轉換：將 LINE ID 轉換成資料庫實體 UUID
-    async function prepareUserIdentifiers() {
-        try {
-            // 1. 先用 LINE ID 查出 users 表的 uuid
-            const { data: userRow, error: userErr } = await supabaseClient
-                .from('users')
-                .select('id')
-                .eq('line_uid', userProfile.userId)
-                .maybeSingle();
-
-            if (userErr) throw userErr;
-            if (!userRow) {
-                document.getElementById('loading-status').innerText = "系統查無您的球員帳號，請聯繫管理員登錄。";
                 return;
             }
-
-            // 2. 拿著 user_id 嘗試去 team_members 撈取 id
-            const { data: memberRow, error: memberErr } = await supabaseClient
-                .from('team_members')
-                .select('id')
-                .eq('user_id', userRow.id)
-                .maybeSingle();
-
-            // 3. 安全防護：如果隊員表有資料就用隊員ID，沒有就直接用用戶ID降級對齊
-            globalMemberId = memberRow ? memberRow.id : userRow.id;
-
-            // 順利取得識別碼後，開始同步賽事
-            document.getElementById('loading-status').innerText = "正在同步球賽行程...";
-            await fetchTournaments();
-
+            state.userProfile = await liff.getProfile();
+            await syncUserData();
         } catch (err) {
-            console.error("識別碼轉換失敗:", err);
-            document.getElementById('loading-status').innerText = "識別碼綁定失敗: " + err.message;
+            console.error("Init failed", err);
+            document.getElementById('loading-screen').innerHTML = `<p class='text-red-500'>連線失敗: ${err.message}</p>`;
         }
     }
 
-    async function fetchTournaments() {
-        try {
-            // 1. 撈取所有球賽
-            const { data: events, error } = await supabaseClient
-                .from('events')
-                .select('*');
+    // --- 資料同步 (對齊 sharedLogic) ---
+    async function syncUserData() {
+        const { data: user, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('line_uid', state.userProfile.userId)
+            .maybeSingle();
 
-            if (error) throw error;
+        if (error) throw error;
 
-            // 2. 撈取報名紀錄（精準修正為對比 team_member_id）
-            const { data: myRegistrations, regError } = await supabaseClient
-                .from('event_registrations')
-                .select('event_id')
-                .eq('team_member_id', globalMemberId);
-
-            if (regError) {
-                alert("讀取報名紀錄失敗: " + regError.message);
-                throw regError;
-            }
-
-            const registeredEventIds = new Set(myRegistrations ? myRegistrations.map(r => r.event_id) : []);
-
-            document.getElementById('loading-status').classList.add('hidden');
-            renderTournamentList(events, registeredEventIds);
-
-        } catch (error) {
-            console.error("資料庫讀取異常:", error);
-            document.getElementById('loading-status').innerText = "連線失敗: " + error.message;
-        }
-    }
-
-    function renderTournamentList(events, registeredEventIds) {
-        const listContainer = document.getElementById('tournament-list');
-        listContainer.innerHTML = '';
-
-        if (!events || events.length === 0) {
-            listContainer.innerHTML = '<div class="text-center text-slate-400 py-8 text-sm">目前無任何排定賽事</div>';
+        if (!user) {
+            // 處理新用戶：進入 Profile 設定
+            renderProfileSetup();
             return;
         }
 
-        events.forEach(event => {
-            const isRegistered = registeredEventIds.has(event.id);
-            const card = document.createElement('div');
+        state.dbUser = user;
 
-            card.className = "bg-white rounded-2xl border border-slate-300 overflow-hidden shadow-xs flex flex-col";
+        // 獲取所屬球隊
+        const { data: members } = await supabaseClient
+            .from('team_members')
+            .select('team_id')
+            .eq('user_id', user.id);
 
-            let actionButtonsHtml = '';
-            if (!isRegistered) {
-                actionButtonsHtml = `
-                    <div class="pt-1">
-                        <button onclick="registerGame('${event.id}')" class="w-full bg-[#047857] hover:bg-emerald-800 text-white py-3 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm">
-                            查看詳情 / 報名
-                        </button>
-                    </div>
-                `;
+        if (members && members.length > 0) {
+            const teamIds = members.map(m => m.team_id);
+            const { data: teams } = await supabaseClient.from('teams').select('*').in('id', teamIds);
+            state.myTeams = teams || [];
+            state.activeTeam = teams[0];
+        }
+
+        hideLoading();
+        switchTab(0); // 預設進入賽事
+    }
+
+    // --- UI 渲染邏輯 ---
+    function hideLoading() {
+        document.getElementById('loading-screen').classList.add('hidden');
+        document.getElementById('page-container').classList.remove('hidden');
+    }
+
+    function switchTab(index) {
+        state.currentTab = index;
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach((item, i) => {
+            const indicator = item.querySelector('.tab-indicator');
+            if (i === index) {
+                item.classList.add('active-tab');
+                indicator.classList.remove('hidden');
             } else {
-                actionButtonsHtml = `
-                    <div class="space-y-2 pt-1">
-                        <div class="grid grid-cols-2 gap-3">
-                            <button onclick="cancelRegistration('${event.id}')" class="bg-[#DC2626] hover:bg-red-700 text-white py-2.5 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm">
-                                取消報名
-                            </button>
-                            <button onclick="editRegistration('${event.id}')" class="bg-[#D97706] hover:bg-amber-700 text-white py-2.5 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm">
-                                修改資料
-                            </button>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <button onclick="viewGroups('${event.id}')" class="bg-[#047857] hover:bg-emerald-800 text-white py-2.5 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm">
-                                分組名單 (3)
-                            </button>
-                            <button onclick="enterScore('${event.id}')" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 py-2.5 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm shadow-2xs">
-                                成績登錄
-                            </button>
-                        </div>
-                    </div>
-                `;
+                item.classList.remove('active-tab');
+                indicator.classList.add('hidden');
             }
-
-            card.innerHTML = `
-                <div class="bg-[#F3F4F6] px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                    <span class="font-bold text-[#1F2937] text-sm md:text-base">${event.title || '例行賽'} - ${event.date || ''}</span>
-                </div>
-
-                <div class="p-4 space-y-4 text-sm">
-                    <div class="grid grid-cols-2 gap-y-3 gap-x-4 text-slate-600">
-                        <div class="flex items-center">球場：<span class="font-bold text-slate-900 ml-1">${event.location || '未定'}</span></div>
-                        <div class="flex items-center">時間：<span class="font-bold text-slate-900 ml-1">${event.start_time || '06:00'}</span></div>
-                        <div class="flex items-center col-span-2">狀態：<span class="font-bold ml-1 ${isRegistered ? 'text-emerald-700' : 'text-rose-600'}">${isRegistered ? '已報名' : '未報名'}</span></div>
-                    </div>
-                    ${actionButtonsHtml}
-                </div>
-            `;
-
-            listContainer.appendChild(card);
         });
-    }
 
-    // 按鈕動作：寫入 event_registrations 資料表（補上 non-nullable status）
-    async function registerGame(eventId) {
-        try {
-            if(!confirm("確定要登記報名這場球賽嗎？")) return;
-            const { error } = await supabaseClient
-                .from('event_registrations')
-                .insert([
-                    {
-                        event_id: eventId,
-                        team_member_id: globalMemberId,
-                        status: '已報名' // 填入非空值，完美解決 status 限制
-                    }
-                ]);
-            if (error) throw error;
-            alert("報名成功！");
-            fetchTournaments();
-        } catch (error) {
-            alert("報名失敗：" + error.message);
+        // 根據 Tab 渲染不同頁面
+        const container = document.getElementById('page-container');
+        container.innerHTML = ''; // 清空
+        container.className = "p-4 space-y-4 fade-in";
+
+        switch(index) {
+            case 0: renderEvents(); break;
+            case 1: renderTeams(); break;
+            case 2: renderGrouping(); break;
+            case 3: renderLeaderboard(); break;
+            case 4: renderMe(); break;
         }
     }
 
-    // 按鈕動作：從 event_registrations 刪除紀錄
-    async function cancelRegistration(eventId) {
-        try {
-            if(!confirm("確定要取消這場球賽的報名嗎？")) return;
-            const { error } = await supabaseClient
-                .from('event_registrations')
-                .delete()
-                .eq('event_id', eventId)
-                .eq('team_member_id', globalMemberId);
-            if (error) throw error;
-            alert("已成功取消報名。");
-            fetchTournaments();
-        } catch (error) {
-            alert("取消失敗：" + error.message);
-        }
+    // --- 頁面模組 (暫時先放 Placeholder，明天進一步實作) ---
+    function renderEvents() {
+        document.getElementById('header-title').innerText = "賽事行程";
+        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>正在獲取賽事列表...</div>`;
+        // 這裡會放入 fetchTournaments 邏輯
     }
 
-    function editRegistration(eventId) { alert("修改資料研發中，活動ID: " + eventId); }
-    function viewGroups(eventId) { alert("分組名單檢視中，活動ID: " + eventId); }
-    function enterScore(eventId) { alert("成績登錄模組開發中，活動ID: " + eventId); }
+    function renderTeams() {
+        document.getElementById('header-title').innerText = "我的球隊";
+        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>球隊功能開發中</div>`;
+    }
 
-    window.addEventListener('load', initLiff);
+    function renderGrouping() {
+        document.getElementById('header-title').innerText = "今日分組";
+        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>分組功能開發中</div>`;
+    }
+
+    function renderLeaderboard() {
+        document.getElementById('header-title').innerText = "即時成績";
+        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>排行榜功能開發中</div>`;
+    }
+
+    function renderMe() {
+        document.getElementById('header-title').innerText = "個人中心";
+        document.getElementById('page-container').innerHTML = `
+            <div class='bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col items-center'>
+                <img src="${state.userProfile.pictureUrl}" class="w-20 h-20 rounded-full border-2 border-[#133B2B] mb-4">
+                <h3 class="font-bold text-lg">${state.dbUser.real_name}</h3>
+                <p class="text-sm text-gray-500 mt-1">差點: ${state.dbUser.initial_handicap}</p>
+                <button onclick="liff.logout(); location.reload();" class="mt-6 w-full py-3 border border-red-200 text-red-500 rounded-xl font-medium">登出系統</button>
+            </div>
+        `;
+    }
+
+    function renderProfileSetup() {
+        hideLoading();
+        document.getElementById('header-title').innerText = "初次使用設定";
+        document.getElementById('page-container').innerHTML = `<div class='p-4'>請填寫您的球員資料...</div>`;
+    }
+
+    // 啟動
+    window.addEventListener('load', initApp);
 </script>
 </body>
 </html>
