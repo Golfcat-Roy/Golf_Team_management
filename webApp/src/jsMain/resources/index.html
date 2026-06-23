@@ -554,18 +554,27 @@
 
                 let adminActions = '';
                 if (isAdmin()) {
-                    adminActions = `
-                        <div class="border-t border-dashed border-gray-100 pt-3 mt-1 space-y-2">
-                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">管理員專用</p>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button onclick="toggleEventStatus('${event.id}', '${event.registration_status}')" class="py-2 ${isStarted ? 'bg-rose-500' : 'bg-emerald-600'} text-white rounded-lg text-[11px] font-bold">
-                                    ${isStarted ? '結束球賽' : '開始球賽'}
-                                </button>
-                                <button onclick="onNavigateToCreateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-bold">變更資訊</button>
-                                <button onclick="onDuplicateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100">複製賽事</button>
+                    if (isClosed) {
+                        adminActions = `
+                            <div class="border-t border-dashed border-gray-100 pt-3 mt-1 space-y-2">
+                                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">管理員專用</p>
+                                <button onclick="archiveEvent('${event.id}')" class="w-full py-2 bg-gray-400 text-white rounded-lg text-[11px] font-bold">從列表移除 (不刪除歷史紀錄)</button>
                             </div>
-                        </div>
-                    `;
+                        `;
+                    } else {
+                        adminActions = `
+                            <div class="border-t border-dashed border-gray-100 pt-3 mt-1 space-y-2">
+                                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">管理員專用</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="toggleEventStatus('${event.id}', '${event.registration_status}')" class="py-2 ${isStarted ? 'bg-rose-500' : 'bg-emerald-600'} text-white rounded-lg text-[11px] font-bold">
+                                        ${isStarted ? '結束球賽' : '開始球賽'}
+                                    </button>
+                                    <button onclick="onNavigateToCreateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-bold">變更資訊</button>
+                                    <button onclick="onDuplicateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100 col-span-2">複製賽事</button>
+                                </div>
+                            </div>
+                        `;
+                    }
                 }
 
                 card.innerHTML = `
