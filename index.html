@@ -70,7 +70,7 @@
     async function initLiff() {
         try {
             if (!window.supabase) {
-                document.getElementById('loading-status').innerText = "資料庫模組載入失敗，請刷網頁。";
+                document.getElementById('loading-status').innerText = "資料庫模組載入失敗，請刷新網頁。";
                 return;
             }
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
@@ -91,23 +91,21 @@
 
     async function fetchTournaments() {
         try {
-            // 1. 撈取所有球賽
+            // 1. 撈取所有球賽（events 表）
             const { data: events, error } = await supabaseClient
                 .from('events')
                 .select('*');
 
             if (error) throw error;
 
-            // 2. 撈取報名紀錄
-            // ⚠️ 注意：如果你的 event_registrations 資料表裡面的欄位不叫 'line_user_id'
-            // 請把下方的 'line_user_id' 換成你當初在資料庫設定的欄位名稱（例如 user_id 或 line_id）
+            // 2. 撈取報名紀錄（已修正欄位名稱為 line_uid）
             const { data: myRegistrations, regError } = await supabaseClient
                 .from('event_registrations')
                 .select('event_id')
-                .eq('line_user_id', userProfile.userId);
+                .eq('line_uid', userProfile.userId);
 
             if (regError) {
-                console.error("🛑 報名資料表查詢失敗，請到 vConsole 的 Log 查看詳細欄位錯誤。");
+                alert("讀取報名紀錄失敗: " + regError.message);
                 throw regError;
             }
 
@@ -135,7 +133,7 @@
             const isRegistered = registeredEventIds.has(event.id);
             const card = document.createElement('div');
 
-            // 還原外殼樣式：白底、圓角、細灰邊框
+            // 還原 Compose 外殼樣式：白底、圓角、細灰邊框
             card.className = "bg-white rounded-2xl border border-slate-300 overflow-hidden shadow-xs flex flex-col";
 
             let actionButtonsHtml = '';
@@ -172,7 +170,7 @@
                 `;
             }
 
-            // 組合灰色獨立 Header 與 Body
+            // 組合灰色獨立 Header 與 Body，並將時間修正為 event.start_time
             card.innerHTML = `
                 <div class="bg-[#F3F4F6] px-4 py-3 border-b border-slate-200 flex justify-between items-center">
                     <span class="font-bold text-[#1F2937] text-sm md:text-base">${event.title || '例行賽'} - ${event.date || ''}</span>
@@ -180,8 +178,8 @@
 
                 <div class="p-4 space-y-4 text-sm">
                     <div class="grid grid-cols-2 gap-y-3 gap-x-4 text-slate-600">
-                        <div class="flex items-center">球場：<span class="font-bold text-slate-900 ml-1">${event.location || '1234'}</span></div>
-                        <div class="flex items-center">時間：<span class="font-bold text-slate-900 ml-1">${event.time || '06:00'}</span></div>
+                        <div class="flex items-center">球場：<span class="font-bold text-slate-900 ml-1">${event.location || '未定'}</span></div>
+                        <div class="flex items-center">時間：<span class="font-bold text-slate-900 ml-1">${event.start_time || '06:00'}</span></div>
                         <div class="flex items-center col-span-2">狀態：<span class="font-bold ml-1 ${isRegistered ? 'text-emerald-700' : 'text-rose-600'}">${isRegistered ? '已報名' : '未報名'}</span></div>
                     </div>
                     ${actionButtonsHtml}
@@ -192,12 +190,13 @@
         });
     }
 
+    // 按鈕動作：寫入 event_registrations 資料表
     async function registerGame(eventId) {
         try {
             if(!confirm("確定要登記報名這場球賽嗎？")) return;
             const { error } = await supabaseClient
                 .from('event_registrations')
-                .insert([{ event_id: eventId, line_user_id: userProfile.userId, user_name: userProfile.displayName }]);
+                .insert([{ event_id: eventId, line_uid: userProfile.userId, user_name: userProfile.displayName }]);
             if (error) throw error;
             alert("報名成功！");
             fetchTournaments();
@@ -206,23 +205,24 @@
         }
     }
 
+    // 按鈕動作：從 event_registrations 刪除紀錄
     async function cancelRegistration(eventId) {
         try {
             if(!confirm("確定要取消這場球賽的報名嗎？")) return;
             const { error } = await supabaseClient
                 .from('event_registrations')
-                .delete().eq('event_id', eventId).eq('line_user_id', userProfile.userId);
+                .delete().eq('event_id', eventId).eq('line_uid', userProfile.userId);
             if (error) throw error;
             alert("已成功取消報名。");
             fetchTournaments();
         } catch (error) {
-            alert("取消失敗 suicide: " + error.message);
+            alert("取消失敗：" + error.message);
         }
     }
 
-    function editRegistration(eventId) { alert("修改資料研發中，球賽代碼: " + eventId); }
-    function viewGroups(eventId) { alert("分組名單檢視中，球賽代碼: " + eventId); }
-    function enterScore(eventId) { alert("成績登錄模組開發中，球賽代碼: " + eventId); }
+    function editRegistration(eventId) { alert("修改資料研發中，活動ID: " + eventId); }
+    function viewGroups(eventId) { alert("分組名單檢視中，活動ID: " + eventId); }
+    function enterScore(eventId) { alert("成績登錄模組開發中，活動ID: " + eventId); }
 
     window.addEventListener('load', initLiff);
 </script>
