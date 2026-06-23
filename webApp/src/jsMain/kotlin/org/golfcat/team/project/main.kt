@@ -10,7 +10,7 @@ fun main() {
     val liff = window.asDynamic().liff
     val liffId = "2010382913-rCaKoQcE"
     
-    fun launchApp() {
+    fun safeStart() {
         val root = document.getElementById("app-root")
         if (root != null) {
             ComposeViewport(root) {
@@ -20,14 +20,20 @@ fun main() {
     }
 
     if (liff == null || liff == undefined) {
-        launchApp()
+        safeStart()
         return
     }
 
-    // 只做初始化，不手動設定 User，讓 LoginScreen 的邏輯來跑
+    // 嘗試初始化 LIFF
     liff.init(kotlin.js.json("liffId" to liffId)).then({
-        launchApp()
-    }, { 
-        launchApp()
+        if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
+            liff.login()
+        } else {
+            safeStart()
+        }
+    }, { err ->
+        // 如果 LIFF 出錯，跳出訊息並強行開啟程式，方便排錯
+        window.alert("LIFF 載入失敗: " + err.toString())
+        safeStart()
     })
 }

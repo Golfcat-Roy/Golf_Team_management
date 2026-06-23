@@ -19,10 +19,6 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew clean :webApp:jsBrowserDistribution --no-daemon --no-configuration-cache --stacktrace -Pkotlin.incremental=false
-      - name: Fix font assets for GitHub Pages
-        run: |
-          # 確保所有檔案權限正確
-          chmod -R 755 webApp/build/dist/js/productionExecutable
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: webApp/build/dist/js/productionExecutable

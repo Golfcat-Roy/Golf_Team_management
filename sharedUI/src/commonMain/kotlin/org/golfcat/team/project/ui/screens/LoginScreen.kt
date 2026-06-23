@@ -34,8 +34,7 @@ fun LoginScreen() {
                 modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF00B900))
             ) {
-                // 加入英文，確保字體失效時仍能辨識按鈕
-                Text("LINE LOGIN (使用 LINE 登入)", color = androidx.compose.ui.graphics.Color.White)
+                Text("使用 LINE 登入", color = androidx.compose.ui.graphics.Color.White)
             }
         }
     }
