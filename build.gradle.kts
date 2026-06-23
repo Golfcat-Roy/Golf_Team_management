@@ -11,7 +11,7 @@ plugins {
 
 allprojects {
     configurations.all {
-        // 使用 0.6.0 版，這在 Kotlin 2.x 中通常比 0.6.1 更穩定
-        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+        // 強制使用 0.4.1，這是目前 KMP Web 最穩定的日期函式庫版本
+        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.4.1")
     }
 }

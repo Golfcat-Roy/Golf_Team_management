@@ -13,12 +13,9 @@ fun main() {
     fun launchApp() {
         val root = document.getElementById("app-root")
         if (root != null) {
-            while (root.hasChildNodes()) {
-                root.removeChild(root.firstChild!!)
-            }
-            ComposeViewport(root) {
-                App()
-            }
+            // 清空舊節點，避免重複掛載導致的 Unspecified type 錯誤
+            while (root.hasChildNodes()) { root.removeChild(root.firstChild!!) }
+            ComposeViewport(root) { App() }
         }
     }
 
@@ -27,16 +24,14 @@ fun main() {
         return
     }
 
-    liff.init(kotlin.js.json("liffId" to liffId)).then({
-        if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
-            liff.login()
-        } else {
-            // 在啟動前，我們先等待字體加載完成，這能有效減少亂碼機率
-            document.asDynamic().fonts.ready.then({
+    // 延遲初始化，避開瀏覽器啟動時的資源爭奪 (減少 AbortError)
+    window.setTimeout({
+        liff.init(kotlin.js.json("liffId" to liffId)).then({
+            if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
+                liff.login()
+            } else {
                 launchApp()
-            })
-        }
-    }, {
-        launchApp()
-    })
+            }
+        }, { launchApp() })
+    }, 100)
 }
