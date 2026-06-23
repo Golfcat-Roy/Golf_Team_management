@@ -101,6 +101,7 @@
         currentTab: 0,
         myTeams: [],
         activeTeam: null,
+        myRole: "member", // 目前在 activeTeam 的角色
         myMemberId: null,
 
         // 計分狀態
@@ -116,6 +117,12 @@
             eventObj: null
         }
     };
+
+    // --- 工具函式 ---
+    function isAdmin() {
+        const r = state.myRole;
+        return r === "admin" || r === "president" || r === "vice_president" || r === "vice_admin";
+    }
 
     // --- 初始化 ---
     async function initApp() {
@@ -144,14 +151,13 @@
         if (error) throw error;
 
         if (!user) {
-            // 處理新用戶：進入 Profile 設定
             renderProfileSetup();
             return;
         }
 
         state.dbUser = user;
 
-        // 獲取所屬球隊 (包含 member id)
+        // 獲取所屬球隊與角色
         const { data: members } = await supabaseClient
             .from('team_members')
             .select('*, teams(*)')
@@ -161,10 +167,11 @@
             state.myTeams = members.map(m => m.teams) || [];
             state.activeTeam = state.myTeams[0];
             state.myMemberId = members[0].id;
+            state.myRole = members[0].role;
         }
 
         hideLoading();
-        switchTab(0); // 預設進入賽事
+        switchTab(0);
     }
 
     // --- UI 渲染邏輯 ---
@@ -472,7 +479,66 @@
 
     function renderTeams() {
         document.getElementById('header-title').innerText = "我的球隊";
-        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>球隊功能開發中</div>`;
+        const container = document.getElementById('page-container');
+
+        let teamsHtml = state.myTeams.map(t => `
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-gray-900 text-lg">${t.name}</h3>
+                    <span class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md font-bold">${state.myRole === 'admin' ? '管理者' : '隊員'}</span>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">球隊代碼：${t.join_code}</p>
+
+                ${isAdmin() ? `
+                    <div class="grid grid-cols-2 gap-3 mt-4">
+                        <button onclick="alert('功能開發中')" class="py-2 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold border border-gray-200">球隊設定</button>
+                        <button onclick="alert('功能開發中')" class="py-2 bg-[#133B2B] text-white rounded-xl text-xs font-bold">建立新賽事</button>
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="space-y-4">
+                ${teamsHtml}
+                <div class="bg-emerald-50 p-6 rounded-3xl border border-dashed border-emerald-200 text-center">
+                    <h4 class="font-bold text-emerald-800">加入其他球隊</h4>
+                    <p class="text-[11px] text-emerald-600 mt-1">請輸入由球隊管理員提供的六位數代碼</p>
+                    <div class="mt-4 flex space-x-2">
+                        <input type="text" id="join-code-input" maxlength="6" class="flex-1 bg-white border-none rounded-xl p-3 text-center font-mono text-lg tracking-widest focus:ring-2 focus:ring-[#133B2B]" placeholder="000000">
+                        <button onclick="joinTeam()" class="bg-[#133B2B] text-white px-6 rounded-xl font-bold text-sm">加入</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function joinTeam() {
+        const code = document.getElementById('join-code-input').value;
+        if (code.length !== 6) { alert("請輸入正確的 6 位數代碼"); return; }
+
+        showLoading("正在驗證代碼...");
+        try {
+            // 1. 查找球隊
+            const { data: team, error } = await supabaseClient.from('teams').select('*').eq('join_code', code).maybeSingle();
+            if (error || !team) throw new Error("無效的球隊代碼");
+
+            // 2. 寫入成員表
+            const { error: joinError } = await supabaseClient.from('team_members').insert([{
+                team_id: team.id,
+                user_id: state.dbUser.id,
+                role: 'member'
+            }]);
+
+            if (joinError) throw joinError;
+
+            alert("成功加入球隊：" + team.name);
+            location.reload();
+        } catch (err) {
+            alert("加入失敗：" + err.message);
+            hideLoading();
+            renderTeams();
+        }
     }
 
     function renderGrouping() {
