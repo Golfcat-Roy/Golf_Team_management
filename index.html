@@ -359,9 +359,23 @@
             const { data: members } = await supabaseClient.from('event_group_members').select('*, team_members(*, users(*))').eq('group_id', state.scoring.groupId);
             state.scoring.players = members.map(m => m.team_members);
 
-            // 初始化成績 Map
+            // [任務4新增] 對抗賽對手偵測邏輯
+            state.scoring.opponentPlayers = [];
+            if (state.scoring.isMatchPlay) {
+                const { data: pairings } = await supabaseClient.from('match_pairings').select('*').eq('event_id', eventId);
+                const pairing = pairings?.find(p => p.group_a_id === state.scoring.groupId || p.group_b_id === state.scoring.groupId);
+                if (pairing) {
+                    const opponentGroupId = pairing.group_a_id === state.scoring.groupId ? pairing.group_b_id : pairing.group_a_id;
+                    const { data: oppMembers } = await supabaseClient.from('event_group_members').select('*, team_members(*, users(*))').eq('group_id', opponentGroupId);
+                    state.scoring.opponentPlayers = oppMembers.map(m => m.team_members);
+                }
+            }
+
+            // 初始化成績 Map (包含隊友與對手)
             state.scoring.playerScores = {};
-            state.scoring.players.forEach(p => { state.scoring.playerScores[p.id] = Array(18).fill(0); });
+            [...state.scoring.players, ...state.scoring.opponentPlayers].forEach(p => {
+                state.scoring.playerScores[p.id] = Array(18).fill(0);
+            });
 
             // 載入現有成績
             const { data: scores } = await supabaseClient.from('scores').select('*').eq('event_id', eventId);
@@ -390,16 +404,63 @@
         document.getElementById('header-action').innerHTML = `<button onclick="saveScores()" class="text-sm bg-white text-[#133B2B] px-3 py-1 rounded-full font-bold">儲存</button>`;
 
         const container = document.getElementById('page-container');
+
+        // [任務4新增] 對抗賽積分計算區
+        let matchHeaderHtml = '';
+        if (state.scoring.isMatchPlay && state.scoring.opponentPlayers.length > 0) {
+            const par = state.scoring.eventPars[state.scoring.currentHole - 1];
+            const myBest = Math.min(...state.scoring.players.map(p => state.scoring.playerScores[p.id][state.scoring.currentHole - 1]).filter(s => s > 0));
+            const oppBest = Math.min(...state.scoring.opponentPlayers.map(p => state.scoring.playerScores[p.id][state.scoring.currentHole - 1]).filter(s => s > 0));
+
+            // 計算成就加分
+            let myBonus = 0;
+            state.scoring.players.forEach(p => {
+                const s = state.scoring.playerScores[p.id][state.scoring.currentHole - 1];
+                if (s > 0) {
+                    if (s === 1 || s <= par - 2) myBonus += 1.0;
+                    else if (s === par - 1) myBonus += 0.5;
+                }
+            });
+
+            matchHeaderHtml = `
+                <div class="bg-emerald-800 text-white p-4 rounded-2xl shadow-inner mb-4">
+                    <div class="flex justify-between items-center text-xs opacity-80 uppercase tracking-widest mb-2">
+                        <span>對抗賽即時戰況</span>
+                        <span>Par ${par}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="border-r border-emerald-700 pr-2">
+                            <p class="text-[10px] opacity-70">本組最佳</p>
+                            <p class="text-2xl font-black">${myBest === Infinity ? '-' : myBest}</p>
+                            ${myBonus > 0 ? `<p class="text-[9px] text-amber-400 font-bold">⛳ 成就點數: +${myBonus}</p>` : ''}
+                        </div>
+                        <div class="pl-2">
+                            <p class="text-[10px] opacity-70">對手最佳</p>
+                            <p class="text-2xl font-black text-emerald-300">${oppBest === Infinity ? '-' : oppBest}</p>
+                            <p class="text-[9px] opacity-50">點數由後台最終結算</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         container.innerHTML = `
+            ${matchHeaderHtml}
             <div class="flex justify-between items-center mb-4">
                 <button onclick="changeHole(-1)" class="p-2 bg-gray-200 rounded-full w-10 h-10 flex items-center justify-center font-bold">◀</button>
                 <button onclick="renderLeaderboard()" class="text-amber-600 font-bold border border-amber-600 px-4 py-2 rounded-xl text-sm">賽事排行</button>
                 <button onclick="changeHole(1)" class="p-2 bg-gray-200 rounded-full w-10 h-10 flex items-center justify-center font-bold">▶</button>
             </div>
 
+            <div class="text-[10px] text-gray-400 font-bold uppercase mb-2">本組球員</div>
             <div id="player-scoring-list" class="space-y-4"></div>
 
-            <button onclick="exitScoring()" class="w-full py-3 text-gray-500 text-sm font-medium">退出計分板</button>
+            ${state.scoring.opponentPlayers.length > 0 ? `
+                <div class="text-[10px] text-gray-400 font-bold uppercase mt-6 mb-2">對手資訊 (唯讀)</div>
+                <div id="opponent-scoring-list" class="space-y-2 opacity-80"></div>
+            ` : ''}
+
+            <button onclick="exitScoring()" class="w-full py-3 text-gray-500 text-sm font-medium mt-8">退出計分板</button>
         `;
 
         const list = document.getElementById('player-scoring-list');
@@ -422,6 +483,23 @@
             `;
             list.appendChild(card);
         });
+
+        // [任務4新增] 渲染對手名單
+        const oppList = document.getElementById('opponent-scoring-list');
+        if (oppList) {
+            state.scoring.opponentPlayers.forEach(player => {
+                const currentScore = state.scoring.playerScores[player.id][state.scoring.currentHole - 1];
+                const card = document.createElement('div');
+                card.className = "bg-gray-50 rounded-xl p-3 flex justify-between items-center text-sm";
+                card.innerHTML = `
+                    <span class="text-gray-600 font-medium">${player.users.real_name}</span>
+                    <span class="font-bold ${currentScore > 0 ? 'text-emerald-700' : 'text-gray-300'}">
+                        ${currentScore > 0 ? currentScore : '尚未輸入'}
+                    </span>
+                `;
+                oppList.appendChild(card);
+            });
+        }
     }
 
     function updateHoleScore(memberId, delta) {
