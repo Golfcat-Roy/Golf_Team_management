@@ -34,6 +34,11 @@
         .active-tab { color: #10B981 !important; opacity: 1 !important; }
         .tab-indicator { height: 4px; width: 40px; background-color: #10B981; border-radius: 2px; position: absolute; top: 0; }
 
+        /* 球隊選單樣式 */
+        #team-menu { transition: all 0.2s ease-in-out; transform-origin: top; }
+        .menu-item { padding: 12px 20px; border-bottom: 1px solid #f0f0f0; }
+        .menu-item:last-child { border-bottom: none; }
+
         /* 模擬 App 切換動畫 */
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -45,11 +50,22 @@
 <div class="max-w-md mx-auto h-screen bg-white flex flex-col relative shadow-2xl border-x border-gray-100">
 
     <!-- Header (對齊 App 標題列) -->
-    <header id="app-header" class="bg-[#133B2B] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-6">
-        <div class="w-6"></div> <!-- 佔位符 -->
-        <span id="header-title">GolfCat</span>
-        <div id="header-action" class="w-6 text-xl">
-             <!-- 右側動作按鈕，如 + 號 -->
+    <header id="app-header" class="bg-[#133B2B] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-6 relative z-[60]">
+        <div id="header-left" class="w-6 text-xl cursor-pointer" onclick="renderProfileSetup(true)">👤</div>
+        <div class="flex items-center cursor-pointer" onclick="toggleTeamMenu()">
+            <span id="header-title">載入中...</span>
+            <span class="ml-1 text-xs opacity-60">▼</span>
+        </div>
+        <div id="header-action" class="w-6 text-xl"></div>
+
+        <!-- 球隊下拉選單 -->
+        <div id="team-menu" class="hidden absolute top-16 left-1/2 -translate-x-1/2 w-64 bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2">
+            <div id="team-list-container"></div>
+            <div class="border-t border-gray-100 mt-2">
+                <div class="menu-item text-[#133B2B] text-sm font-bold flex items-center" onclick="switchTab(3)">
+                    <span class="mr-2">➕</span> 加入/建立球隊
+                </div>
+            </div>
         </div>
     </header>
 
@@ -68,23 +84,23 @@
     <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-[#133B2B] h-16 flex items-center justify-around text-white shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50">
         <div onclick="switchTab(0)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">賽事</span>
+            <span class="text-[10px] mt-1">賽事列表</span>
         </div>
         <div onclick="switchTab(1)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">球隊</span>
+            <span class="text-[10px] mt-1">排行榜</span>
         </div>
         <div onclick="switchTab(2)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">分組</span>
+            <span class="text-[10px] mt-1">歷史成績</span>
         </div>
         <div onclick="switchTab(3)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">成績</span>
+            <span class="text-[10px] mt-1">球隊管理</span>
         </div>
         <div onclick="switchTab(4)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">我的</span>
+            <span class="text-[10px] mt-1">使用說明</span>
         </div>
     </nav>
 </div>
@@ -180,6 +196,37 @@
         document.getElementById('page-container').classList.remove('hidden');
     }
 
+    // --- 導覽與球隊切換邏輯 ---
+    function toggleTeamMenu() {
+        const menu = document.getElementById('team-menu');
+        menu.classList.toggle('hidden');
+        if (!menu.classList.contains('hidden')) {
+            renderTeamList();
+        }
+    }
+
+    function renderTeamList() {
+        const container = document.getElementById('team-list-container');
+        container.innerHTML = state.myTeams.map(t => `
+            <div class="menu-item flex justify-between items-center cursor-pointer hover:bg-gray-50 ${state.activeTeam?.id === t.id ? 'bg-emerald-50 text-[#133B2B]' : 'text-gray-600'}"
+                 onclick="selectTeam('${t.id}')">
+                <span class="text-sm font-medium">${t.name}</span>
+                ${state.activeTeam?.id === t.id ? '<span>✅</span>' : ''}
+            </div>
+        `).join('');
+    }
+
+    function selectTeam(teamId) {
+        const team = state.myTeams.find(t => t.id === teamId);
+        if (team) {
+            state.activeTeam = team;
+            // 重新同步該球隊的角色 (這裡簡化處理，實際可能需要重新查詢)
+            document.getElementById('header-title').innerText = team.name;
+            toggleTeamMenu();
+            switchTab(state.currentTab); // 刷新當前頁面
+        }
+    }
+
     function switchTab(index) {
         state.currentTab = index;
         const navItems = document.querySelectorAll('.nav-item');
@@ -194,18 +241,99 @@
             }
         });
 
-        // 根據 Tab 渲染不同頁面
+        // 根據 Tab 渲染不同頁面 (按新順序)
         const container = document.getElementById('page-container');
-        container.innerHTML = ''; // 清空
+        container.innerHTML = '';
         container.className = "p-4 space-y-4 fade-in";
+
+        if (state.activeTeam) {
+            document.getElementById('header-title').innerText = state.activeTeam.name;
+        }
 
         switch(index) {
             case 0: renderEvents(); break;
-            case 1: renderTeams(); break;
-            case 2: renderGrouping(); break;
-            case 3: renderLeaderboard(); break;
-            case 4: renderMe(); break;
+            case 1: renderLeaderboard(); break;
+            case 2: renderHistory(); break;
+            case 3: renderTeams(); break; // 球隊管理
+            case 4: renderInstructions(); break;
         }
+    }
+
+    async function renderHistory() {
+        document.getElementById('header-title').innerText = "歷史成績";
+        // 複用原本 renderMe 裡的統計與列表邏輯
+        showLoading("正在統計戰績...");
+        try {
+            const { data: scores } = await supabaseClient
+                .from('scores')
+                .select('*, events(*)')
+                .eq('team_member_id', state.myMemberId)
+                .order('created_at', { ascending: false });
+
+            hideLoading();
+            const container = document.getElementById('page-container');
+            let historyHtml = scores?.map(s => `
+                <div onclick="viewScorecard('${s.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:bg-gray-50 transition-all">
+                    <div>
+                        <p class="font-bold text-gray-900 text-sm">${s.events.title}</p>
+                        <p class="text-[10px] text-gray-400 mt-1">📅 ${s.events.date}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-lg font-black text-[#133B2B]">${s.gross_score}</p>
+                        <p class="text-[9px] text-gray-400 uppercase">Gross</p>
+                    </div>
+                </div>
+            `).join('') || "<p class='text-center py-10 text-gray-400'>尚無參賽紀錄</p>";
+
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-[#133B2B] text-white p-5 rounded-2xl shadow-lg">
+                        <h4 class="text-[10px] opacity-70 uppercase tracking-widest mb-1">我的表現彙總</h4>
+                        <p class="text-lg font-bold">歷史戰績牆 (History)</p>
+                    </div>
+                    ${historyHtml}
+                    <div id="scorecard-modal" class="hidden fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm"></div>
+                </div>
+            `;
+        } catch (e) {
+            hideLoading();
+            alert("載入歷史失敗");
+        }
+    }
+
+    function renderInstructions() {
+        document.getElementById('header-title').innerText = "使用說明";
+        const container = document.getElementById('page-container');
+        container.innerHTML = `
+            <div class="bg-white p-6 rounded-3xl shadow-sm space-y-6">
+                <div class="flex items-center space-x-4 border-b pb-4">
+                    <div class="text-3xl">⛳</div>
+                    <div>
+                        <h3 class="font-bold text-lg text-gray-800">歡迎來到 GolfCat</h3>
+                        <p class="text-xs text-gray-500">LINE 內置球隊管理系統</p>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center font-bold text-xs shrink-0">1</div>
+                        <p class="text-sm text-gray-600">在<b>「賽事列表」</b>查看最新球賽並完成報名。</p>
+                    </div>
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center font-bold text-xs shrink-0">2</div>
+                        <p class="text-sm text-gray-600">比賽當天，點擊<b>「成績登錄」</b>即可代表本組成員計分。</p>
+                    </div>
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center font-bold text-xs shrink-0">3</div>
+                        <p class="text-sm text-gray-600">透過<b>「排行榜」</b>即時追蹤當日戰況，所有數據與 Android 版同步。</p>
+                    </div>
+                </div>
+                <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                    <p class="text-xs text-amber-800 leading-relaxed">
+                        💡 <b>溫馨提醒：</b>若您是球隊管理員，請進入「球隊管理」分頁進行賽事建立與成員審核。
+                    </p>
+                </div>
+            </div>
+        `;
     }
 
     // --- 頁面模組 ---
