@@ -12,6 +12,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -28,72 +30,206 @@
         SuperGolfCat
     </header>
 
-    <main class="flex-1 p-4 space-y-4 overflow-y-auto">
-
-        <div class="border border-slate-200 rounded-xl p-4 bg-white shadow-xs space-y-3">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                <span class="font-bold text-slate-800 text-base">321 例行賽 - 2026.06.22</span>
-            </div>
-            <div class="grid grid-cols-2 gap-y-2 text-sm text-slate-600">
-                <div>球場：<span class="font-semibold text-slate-900">321</span></div>
-                <div>時間：<span class="font-semibold text-slate-900">06:00</span></div>
-                <div>組別：<span class="font-semibold text-slate-900">第 2 組</span></div>
-            </div>
-            <div class="pt-1">
-                <button class="w-full bg-emerald-700 text-white py-2.5 px-4 rounded-lg font-medium shadow-xs active:bg-emerald-800 transition text-sm">
-                    查看詳情 / 報名
-                </button>
-            </div>
+    <main id="main-content" class="flex-1 p-4 space-y-4 overflow-y-auto">
+        <div id="loading-status" class="text-center text-slate-500 py-8">
+            正在透過 LINE 安全登入...
         </div>
-
-        <div class="border border-slate-200 rounded-xl p-4 bg-white shadow-xs space-y-3">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                <span class="font-bold text-slate-800 text-base">1234 例行賽 - 2026.06.21</span>
-            </div>
-            <div class="grid grid-cols-2 gap-y-2 text-sm text-slate-600">
-                <div>球場：<span class="font-semibold text-slate-900">1234</span></div>
-                <div>時間：<span class="font-semibold text-slate-900">06:00</span></div>
-                <div>組別：<span class="font-semibold text-slate-900">第 2 組</span></div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 pt-1">
-                <button class="bg-rose-600 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-rose-700 transition text-sm">
-                    取消報名
-                </button>
-                <button class="bg-amber-500 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-amber-600 transition text-sm">
-                    修改資料
-                </button>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-                <button class="bg-emerald-700 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-emerald-800 transition text-sm">
-                    分組名單 (3)
-                </button>
-                <button class="border border-slate-300 text-slate-700 py-2 px-4 rounded-lg font-medium bg-white active:bg-slate-50 transition text-sm">
-                    成績登錄
-                </button>
-            </div>
-        </div>
-
+        <div id="tournament-list" class="space-y-4"></div>
     </main>
 </div>
 
 <script>
+    // ==========================================
+    // 🛠️ 請填入你自己的 Supabase 設定資料
+    // ==========================================
+    const SUPABASE_URL = "https://你的_SUPABASE_URL.supabase.co";
+    const SUPABASE_ANON_KEY = "你的_SUPABASE_ANON_KEY";
+
+    // 正確初始化 Supabase 客戶端
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let userProfile = null;
+
+    // ==========================================
+    // 1. 初始化 LINE LIFF
+    // ==========================================
     async function initLiff() {
         try {
-            // 把這裡更換成你在 LINE Developers 後台申請的 LIFF ID
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
 
             if (!liff.isLoggedIn()) {
                 liff.login();
             } else {
-                const profile = await liff.getProfile();
-                console.log("LIFF 登入成功！用戶姓名:", profile.displayName);
-                // 之後可以在這裡用 JavaScript 直接 fetch 你的 Supabase API 拿資料
+                userProfile = await liff.getProfile();
+                console.log("LINE 登入成功！", userProfile);
+
+                document.getElementById('loading-status').innerText = "正在讀取球賽資料...";
+                await fetchTournaments();
             }
         } catch (error) {
             console.error("LIFF 初始化失敗:", error);
+            document.getElementById('loading-status').innerText = "LINE 登入失敗，請於 LINE 內開啟。";
         }
     }
+
+    // ==========================================
+    // 2. 從真實資料表（events、event_registrations）撈取資料
+    // ==========================================
+    async function fetchTournaments() {
+        try {
+            // 👉 1. 撈取所有球賽（對應你的 'events' 資料表）
+            // 💡 註：此處假設排序欄位為 'date'。如果你的日期欄位叫作 'created_at' 或其他名字，請修改 order() 內單字
+            const { data: events, error } = await supabase
+                .from('events')
+                .select('*')
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            // 👉 2. 撈取目前使用者的報名紀錄（對應你的 'event_registrations' 資料表）
+            // 💡 註：此處假設欄位名稱為 'line_user_id'。如果你的欄位是用 uuid 關聯到 users 表，請調整 .eq() 的條件
+            const { data: myRegistrations, regError } = await supabase
+                .from('event_registrations')
+                .select('event_id')
+                .eq('line_user_id', userProfile.userId);
+
+            if (regError) throw regError;
+
+            // 把自己有報名的 event_id 整理成一個 Set
+            const registeredEventIds = new Set(myRegistrations ? myRegistrations.map(r => r.event_id) : []);
+
+            // 隱藏載入提示
+            document.getElementById('loading-status').classList.add('hidden');
+
+            // 開始渲染畫面
+            renderTournamentList(events, registeredEventIds);
+
+        } catch (error) {
+            console.error("資料庫讀取失敗:", error);
+            document.getElementById('loading-status').innerText = "資料庫連線失敗: " + error.message;
+        }
+    }
+
+    // ==========================================
+    // 3. 將資料動態組裝成 HTML 畫面
+    // ==========================================
+    function renderTournamentList(events, registeredEventIds) {
+        const listContainer = document.getElementById('tournament-list');
+        listContainer.innerHTML = '';
+
+        if (!events || events.length === 0) {
+            listContainer.innerHTML = '<div class="text-center text-slate-400 py-8">目前沒有安排賽事</div>';
+            return;
+        }
+
+        events.forEach(event => {
+            // 判斷當前使用者是否已經報名此賽事
+            const isRegistered = registeredEventIds.has(event.id);
+
+            const card = document.createElement('div');
+            card.className = "border border-slate-200 rounded-xl p-4 bg-white shadow-xs space-y-3";
+
+            let actionButtonsHtml = '';
+            if (!isRegistered) {
+                actionButtonsHtml = `
+                    <div class="pt-1">
+                        <button onclick="registerGame('${event.id}')" class="w-full bg-emerald-700 text-white py-2.5 px-4 rounded-lg font-medium shadow-xs active:bg-emerald-800 transition text-sm">
+                            查看詳情 / 報名
+                        </button>
+                    </div>
+                `;
+            } else {
+                actionButtonsHtml = `
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button onclick="cancelRegistration('${event.id}')" class="bg-rose-600 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-rose-700 transition text-sm">
+                            取消報名
+                        </button>
+                        <button onclick="editRegistration('${event.id}')" class="bg-amber-500 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-amber-600 transition text-sm">
+                            修改資料
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="viewGroups('${event.id}')" class="bg-emerald-700 text-white py-2 px-4 rounded-lg font-medium shadow-xs active:bg-emerald-800 transition text-sm">
+                            分組名單
+                        </button>
+                        <button onclick="enterScore('${event.id}')" class="border border-slate-300 text-slate-700 py-2 px-4 rounded-lg font-medium bg-white active:bg-slate-50 transition text-sm">
+                            成績登錄
+                        </button>
+                    </div>
+                `;
+            }
+
+            // 💡 欄位對接提示：
+            // 如果你的 events 表內，賽事名稱不叫 'title' 而是叫 'name'，請把下面 ${event.title} 改為 ${event.name}
+            // 如果球場欄位不叫 'location' 而是叫 'venue' 或 'course'，請做對應更換
+            card.innerHTML = `
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <span class="font-bold text-slate-800 text-base">${event.title || '例行賽'} - ${event.date || ''}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-y-2 text-sm text-slate-600">
+                    <div>球場：<span class="font-semibold text-slate-900">${event.location || '未定'}</span></div>
+                    <div>時間：<span class="font-semibold text-slate-900">${event.time || '06:00'}</span></div>
+                    <div>狀態：<span class="font-semibold text-emerald-700">${isRegistered ? '已報名' : '未報名'}</span></div>
+                </div>
+                ${actionButtonsHtml}
+            `;
+
+            listContainer.appendChild(card);
+        });
+    }
+
+    // ==========================================
+    // 4. 按鈕動作：寫入 event_registrations 資料表
+    // ==========================================
+    async function registerGame(eventId) {
+        try {
+            if(!confirm("確定要報名此場賽事嗎？")) return;
+
+            // 寫入資料到 'event_registrations' 資料表
+            const { error } = await supabase
+                .from('event_registrations')
+                .insert([
+                    {
+                        event_id: eventId,
+                        line_user_id: userProfile.userId,
+                        user_name: userProfile.displayName
+                    }
+                ]);
+
+            if (error) throw error;
+
+            alert("報名成功！");
+            fetchTournaments();
+        } catch (error) {
+            alert("報名失敗：" + error.message);
+        }
+    }
+
+    // ==========================================
+    // 5. 按鈕動作：從 event_registrations 刪除紀錄
+    // ==========================================
+    async function cancelRegistration(eventId) {
+        try {
+            if(!confirm("確定要取消報名嗎？")) return;
+
+            const { error } = await supabase
+                .from('event_registrations')
+                .delete()
+                .eq('event_id', eventId)
+                .eq('line_user_id', userProfile.userId);
+
+            if (error) throw error;
+
+            alert("已取消報名。");
+            fetchTournaments();
+        } catch (error) {
+            alert("操作失敗：" + error.message);
+        }
+    }
+
+    function editRegistration(eventId) { alert("修改資料功能開發中，活動ID: " + eventId); }
+    function viewGroups(eventId) { alert("查看分組名單功能開發中，活動ID: " + eventId); }
+    function enterScore(eventId) { alert("成績登錄功能開發中，活動ID: " + eventId); }
 
     window.onload = function() {
         initLiff();
