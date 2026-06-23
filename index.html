@@ -100,7 +100,21 @@
         dbUser: null,      // Supabase User
         currentTab: 0,
         myTeams: [],
-        activeTeam: null
+        activeTeam: null,
+        myMemberId: null,
+
+        // 計分狀態
+        scoring: {
+            eventId: null,
+            groupId: null,
+            currentHole: 1,
+            players: [],
+            opponentPlayers: [],
+            playerScores: {}, // { memberId: [hole1, hole2, ...] }
+            eventPars: Array(18).fill(4),
+            isMatchPlay: false,
+            eventObj: null
+        }
     };
 
     // --- 初始化 ---
@@ -137,17 +151,16 @@
 
         state.dbUser = user;
 
-        // 獲取所屬球隊
+        // 獲取所屬球隊 (包含 member id)
         const { data: members } = await supabaseClient
             .from('team_members')
-            .select('team_id')
+            .select('*, teams(*)')
             .eq('user_id', user.id);
 
         if (members && members.length > 0) {
-            const teamIds = members.map(m => m.team_id);
-            const { data: teams } = await supabaseClient.from('teams').select('*').in('id', teamIds);
-            state.myTeams = teams || [];
-            state.activeTeam = teams[0];
+            state.myTeams = members.map(m => m.teams) || [];
+            state.activeTeam = state.myTeams[0];
+            state.myMemberId = members[0].id;
         }
 
         hideLoading();
@@ -188,11 +201,273 @@
         }
     }
 
-    // --- 頁面模組 (暫時先放 Placeholder，明天進一步實作) ---
-    function renderEvents() {
+    // --- 頁面模組 ---
+    async function renderEvents() {
         document.getElementById('header-title').innerText = "賽事行程";
-        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>正在獲取賽事列表...</div>`;
-        // 這裡會放入 fetchTournaments 邏輯
+        const container = document.getElementById('page-container');
+        container.innerHTML = `
+            <div id="event-loading" class="flex flex-col items-center py-20 text-gray-400">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300 mb-2"></div>
+                <p class="text-xs">同步行程中...</p>
+            </div>
+            <div id="event-list" class="space-y-4"></div>
+        `;
+
+        await fetchTournaments();
+    }
+
+    async function fetchTournaments() {
+        try {
+            // 1. 撈取所有球賽
+            const { data: events, error } = await supabaseClient
+                .from('events')
+                .select('*')
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            // 2. 撈取我的報名紀錄 (使用 dbUser.id 對齊)
+            // 這裡需要先獲取 team_member_id，為了簡化邏輯我們先假定 user_id 直接對應
+            // 正確做法是去查 team_members 表
+            const { data: myMember } = await supabaseClient
+                .from('team_members')
+                .select('id')
+                .eq('user_id', state.dbUser.id)
+                .maybeSingle();
+
+            const memberId = myMember ? myMember.id : null;
+
+            const { data: myRegs } = await supabaseClient
+                .from('event_registrations')
+                .select('event_id')
+                .eq('team_member_id', memberId);
+
+            const registeredIds = new Set(myRegs?.map(r => r.event_id) || []);
+
+            const listContainer = document.getElementById('event-list');
+            document.getElementById('event-loading').classList.add('hidden');
+            listContainer.innerHTML = '';
+
+            if (!events || events.length === 0) {
+                listContainer.innerHTML = `<div class='text-center py-20 text-gray-400'>目前無任何排定賽事</div>`;
+                return;
+            }
+
+            events.forEach(event => {
+                const isRegistered = registeredIds.has(event.id);
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col space-y-4";
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-gray-900 text-lg">${event.title}</h3>
+                            <div class="flex items-center text-gray-500 text-xs mt-1 space-x-3">
+                                <span class="flex items-center">📅 ${event.date}</span>
+                                <span class="flex items-center">📍 ${event.location}</span>
+                            </div>
+                        </div>
+                        <span class="px-2 py-1 rounded-md text-[10px] font-bold ${isRegistered ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}">
+                            ${isRegistered ? '已報名' : '未報名'}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-500 bg-gray-50 p-3 rounded-xl">
+                        <div>開球：<span class="text-gray-900 font-medium">${event.start_time || '06:00'}</span></div>
+                        <div>規則：<span class="text-gray-900 font-medium">${event.handicap_rule}</span></div>
+                    </div>
+
+                    ${isRegistered
+                        ? `
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="cancelReg('${event.id}', '${memberId}')" class="w-full py-3 bg-white border border-red-200 text-red-500 rounded-xl font-bold text-sm transition-all active:scale-95">取消報名</button>
+                            <button onclick="startScoring('${event.id}')" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95">成績登錄</button>
+                        </div>
+                        `
+                        : `<button onclick="doReg('${event.id}', '${memberId}')" class="w-full py-3 bg-[#133B2B] text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95">我要報名</button>`
+                    }
+                `;
+                listContainer.appendChild(card);
+            });
+
+        } catch (err) {
+            console.error("Fetch events failed", err);
+            document.getElementById('event-loading').innerHTML = `<p class='text-red-500'>資料載入失敗</p>`;
+        }
+    }
+
+    // --- 互動動作 ---
+    async function doReg(eventId, memberId) {
+        if (!memberId) { alert("無法取得球員資料，請重新登入"); return; }
+        try {
+            const { error } = await supabaseClient
+                .from('event_registrations')
+                .insert([{ event_id: eventId, team_member_id: memberId, status: '已報名' }]);
+
+            if (error) throw error;
+            renderEvents(); // 重新渲染
+        } catch (err) {
+            alert("報名失敗：" + err.message);
+        }
+    }
+
+    async function cancelReg(eventId, memberId) {
+        if (!confirm("確定要取消報名嗎？")) return;
+        try {
+            const { error } = await supabaseClient
+                .from('event_registrations')
+                .delete()
+                .eq('event_id', eventId)
+                .eq('team_member_id', memberId);
+
+            if (error) throw error;
+            renderEvents(); // 重新渲染
+        } catch (err) {
+            alert("取消失敗：" + err.message);
+        }
+    }
+
+    // --- 計分模組 ---
+    async function startScoring(eventId) {
+        showLoading("正在載入計分板...");
+        try {
+            const event = await supabaseClient.from('events').select('*').eq('id', eventId).maybeSingle();
+            state.scoring.eventObj = event.data;
+            state.scoring.eventId = eventId;
+            state.scoring.isMatchPlay = event.data.handicap_rule === "Match_Play";
+            state.scoring.eventPars = event.data.pars || Array(18).fill(4);
+
+            // 獲取目前用戶所在的組別
+            const { data: myMember } = await supabaseClient.from('team_members').select('id').eq('user_id', state.dbUser.id).maybeSingle();
+            const { data: groupMember } = await supabaseClient.from('event_group_members').select('group_id').eq('team_member_id', myMember.id).maybeSingle();
+
+            if (!groupMember) {
+                alert("您尚未被分配到此賽事的組別中，無法計分。");
+                hideLoading();
+                return;
+            }
+            state.scoring.groupId = groupMember.group_id;
+
+            // 獲取同組組員
+            const { data: members } = await supabaseClient.from('event_group_members').select('*, team_members(*, users(*))').eq('group_id', state.scoring.groupId);
+            state.scoring.players = members.map(m => m.team_members);
+
+            // 初始化成績 Map
+            state.scoring.playerScores = {};
+            state.scoring.players.forEach(p => { state.scoring.playerScores[p.id] = Array(18).fill(0); });
+
+            // 載入現有成績
+            const { data: scores } = await supabaseClient.from('scores').select('*').eq('event_id', eventId);
+            scores.forEach(s => {
+                if (state.scoring.playerScores[s.team_member_id]) {
+                    state.scoring.playerScores[s.team_member_id] = [...s.hole_scores];
+                }
+            });
+
+            renderScoringUI();
+            hideLoading();
+        } catch (err) {
+            console.error("Start scoring failed", err);
+            alert("計分板載入失敗");
+            hideLoading();
+        }
+    }
+
+    function renderScoringUI() {
+        document.getElementById('header-title').innerText = `第 ${state.scoring.currentHole} 洞 (Par ${state.scoring.eventPars[state.scoring.currentHole-1]})`;
+
+        // 隱藏 Bottom Nav
+        document.getElementById('bottom-nav').classList.add('hidden');
+
+        // 修改 Header Action 為 Save 按鈕
+        document.getElementById('header-action').innerHTML = `<button onclick="saveScores()" class="text-sm bg-white text-[#133B2B] px-3 py-1 rounded-full font-bold">儲存</button>`;
+
+        const container = document.getElementById('page-container');
+        container.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+                <button onclick="changeHole(-1)" class="p-2 bg-gray-200 rounded-full w-10 h-10 flex items-center justify-center font-bold">◀</button>
+                <button onclick="renderLeaderboard()" class="text-amber-600 font-bold border border-amber-600 px-4 py-2 rounded-xl text-sm">賽事排行</button>
+                <button onclick="changeHole(1)" class="p-2 bg-gray-200 rounded-full w-10 h-10 flex items-center justify-center font-bold">▶</button>
+            </div>
+
+            <div id="player-scoring-list" class="space-y-4"></div>
+
+            <button onclick="exitScoring()" class="w-full py-3 text-gray-500 text-sm font-medium">退出計分板</button>
+        `;
+
+        const list = document.getElementById('player-scoring-list');
+        state.scoring.players.forEach(player => {
+            const currentScore = state.scoring.playerScores[player.id][state.scoring.currentHole - 1];
+            const card = document.createElement('div');
+            card.className = "bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between";
+            card.innerHTML = `
+                <div>
+                    <h4 class="font-bold text-lg">${player.users.real_name}</h4>
+                    <p class="text-xs text-gray-400">總桿: ${state.scoring.playerScores[player.id].reduce((a,b)=>a+b, 0)}</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="updateHoleScore('${player.id}', -1)" class="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-xl font-bold">-</button>
+                    <div class="w-12 h-10 bg-white border border-gray-900 rounded-lg flex items-center justify-center font-bold text-lg">
+                        ${currentScore === 0 ? '-' : currentScore}
+                    </div>
+                    <button onclick="updateHoleScore('${player.id}', 1)" class="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-xl font-bold">+</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function updateHoleScore(memberId, delta) {
+        let val = state.scoring.playerScores[memberId][state.scoring.currentHole - 1];
+        if (val === 0) val = state.scoring.eventPars[state.scoring.currentHole-1]; // 預設 Par
+        val += delta;
+        if (val < 1) val = 1;
+        state.scoring.playerScores[memberId][state.scoring.currentHole - 1] = val;
+        renderScoringUI();
+    }
+
+    function changeHole(delta) {
+        state.scoring.currentHole += delta;
+        if (state.scoring.currentHole > 18) state.scoring.currentHole = 1;
+        if (state.scoring.currentHole < 1) state.scoring.currentHole = 18;
+        renderScoringUI();
+    }
+
+    async function saveScores() {
+        try {
+            const updates = state.scoring.players.map(p => ({
+                event_id: state.scoring.eventId,
+                team_member_id: p.id,
+                hole_scores: state.scoring.playerScores[p.id],
+                gross_score: state.scoring.playerScores[p.id].reduce((a,b)=>a+b, 0)
+            }));
+
+            // 使用 upsert
+            const { error } = await supabaseClient
+                .from('scores')
+                .upsert(updates, { onConflict: 'event_id,team_member_id' });
+
+            if (error) throw error;
+            alert("成績已儲存");
+        } catch (err) {
+            alert("儲存失敗: " + err.message);
+        }
+    }
+
+    function exitScoring() {
+        document.getElementById('bottom-nav').classList.remove('hidden');
+        document.getElementById('header-action').innerHTML = '';
+        switchTab(0);
+    }
+
+    function showLoading(text) {
+        const screen = document.getElementById('loading-screen');
+        screen.innerHTML = `
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#133B2B]"></div>
+            <p class="text-gray-500 text-sm">${text}</p>
+        `;
+        screen.classList.remove('hidden');
+        document.getElementById('page-container').classList.add('hidden');
     }
 
     function renderTeams() {
@@ -205,27 +480,159 @@
         document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>分組功能開發中</div>`;
     }
 
-    function renderLeaderboard() {
+    async function renderLeaderboard() {
+        const eventId = state.scoring.eventId || (state.activeTeam ? await getLatestEventId() : null);
+        if (!eventId) {
+            document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>目前無進行中的賽事排行榜</div>`;
+            return;
+        }
+
         document.getElementById('header-title').innerText = "即時成績";
-        document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>排行榜功能開發中</div>`;
+        showLoading("正在計算排名...");
+
+        try {
+            const { data: scores, error } = await supabaseClient
+                .from('scores')
+                .select('*, team_members(users(*))')
+                .eq('event_id', eventId);
+
+            if (error) throw error;
+
+            hideLoading();
+            const container = document.getElementById('page-container');
+            container.innerHTML = `
+                <div class="bg-[#133B2B] text-white p-4 rounded-2xl shadow-lg mb-6">
+                    <h4 class="text-xs opacity-70 uppercase tracking-widest">今日戰況</h4>
+                    <p class="text-lg font-bold">即時總排名 (Leaderboard)</p>
+                </div>
+                <div id="leaderboard-list" class="space-y-3"></div>
+                <button onclick="switchTab(0)" class="w-full py-4 text-gray-400 text-sm">返回賽事列表</button>
+            `;
+
+            const list = document.getElementById('leaderboard-list');
+            if (!scores || scores.length === 0) {
+                list.innerHTML = `<div class='text-center py-10 text-gray-300'>尚未有球員繳交成績</div>`;
+                return;
+            }
+
+            // 排序邏輯：總桿由低到高
+            const sorted = scores.sort((a, b) => a.gross_score - b.gross_score);
+
+            sorted.forEach((s, index) => {
+                const row = document.createElement('div');
+                row.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between";
+                row.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        <span class="w-6 h-6 flex items-center justify-center rounded-full ${index < 3 ? 'bg-amber-100 text-amber-700 font-bold' : 'text-gray-400'} text-xs">
+                            ${index + 1}
+                        </span>
+                        <div>
+                            <p class="font-bold text-gray-900">${s.team_members.users.real_name}</p>
+                            <p class="text-[10px] text-gray-400">已完賽 ${s.hole_scores.filter(h => h > 0).length} 洞</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xl font-black text-[#133B2B]">${s.gross_score}</p>
+                        <p class="text-[9px] text-gray-400 uppercase">Gross</p>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        } catch (err) {
+            alert("載入排行榜失敗");
+            hideLoading();
+        }
+    }
+
+    async function getLatestEventId() {
+        const { data } = await supabaseClient.from('events').select('id').order('date', { ascending: false }).limit(1).maybeSingle();
+        return data?.id;
     }
 
     function renderMe() {
         document.getElementById('header-title').innerText = "個人中心";
         document.getElementById('page-container').innerHTML = `
-            <div class='bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col items-center'>
-                <img src="${state.userProfile.pictureUrl}" class="w-20 h-20 rounded-full border-2 border-[#133B2B] mb-4">
-                <h3 class="font-bold text-lg">${state.dbUser.real_name}</h3>
-                <p class="text-sm text-gray-500 mt-1">差點: ${state.dbUser.initial_handicap}</p>
-                <button onclick="liff.logout(); location.reload();" class="mt-6 w-full py-3 border border-red-200 text-red-500 rounded-xl font-medium">登出系統</button>
+            <div class='bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col items-center text-center'>
+                <div class="relative">
+                    <img src="${state.userProfile.pictureUrl}" class="w-24 h-24 rounded-full border-4 border-white shadow-xl mb-4">
+                    <div class="absolute bottom-4 right-0 bg-emerald-500 w-6 h-6 rounded-full border-2 border-white"></div>
+                </div>
+                <h3 class="font-bold text-2xl text-gray-900">${state.dbUser.real_name}</h3>
+                <p class="text-sm text-gray-400 mt-1">LINE: ${state.userProfile.displayName}</p>
+
+                <div class="grid grid-cols-2 gap-4 w-full mt-8">
+                    <div class="bg-gray-50 p-4 rounded-2xl">
+                        <p class="text-[10px] text-gray-400 uppercase">目前差點</p>
+                        <p class="text-xl font-bold text-emerald-700">${state.dbUser.initial_handicap}</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-2xl">
+                        <p class="text-[10px] text-gray-400 uppercase">所屬球隊</p>
+                        <p class="text-xl font-bold text-gray-700">${state.myTeams.length}</p>
+                    </div>
+                </div>
+
+                <button onclick="renderProfileSetup(true)" class="mt-8 w-full py-4 bg-gray-900 text-white rounded-2xl font-bold shadow-lg transition-all active:scale-95">修改個人資料</button>
+                <button onclick="liff.logout(); location.reload();" class="mt-4 w-full py-4 text-red-500 font-medium">登出系統</button>
+            </div>
+            <p class="text-center text-[10px] text-gray-300 mt-4">GolfCat v2.0 Web Edition</p>
+        `;
+    }
+
+    function renderProfileSetup(isEdit = false) {
+        hideLoading();
+        document.getElementById('header-title').innerText = isEdit ? "修改資料" : "初次使用設定";
+
+        const container = document.getElementById('page-container');
+        container.innerHTML = `
+            <div class="bg-white rounded-3xl p-6 shadow-sm space-y-6">
+                <p class="text-gray-500 text-sm">請提供您的真實姓名與球隊差點，以便系統進行自動化差點計算與分組。</p>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">真實姓名</label>
+                    <input type="text" id="setup-name" value="${isEdit ? state.dbUser.real_name : ''}" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]" placeholder="例如：王小明">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">初始差點 (0-36)</label>
+                    <input type="number" id="setup-handicap" value="${isEdit ? state.dbUser.initial_handicap : '36.0'}" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]">
+                </div>
+
+                <button onclick="saveProfile(${isEdit})" class="w-full py-4 bg-[#133B2B] text-white rounded-2xl font-bold shadow-xl transition-all active:scale-95">
+                    ${isEdit ? '儲存變更' : '開始使用'}
+                </button>
             </div>
         `;
     }
 
-    function renderProfileSetup() {
-        hideLoading();
-        document.getElementById('header-title').innerText = "初次使用設定";
-        document.getElementById('page-container').innerHTML = `<div class='p-4'>請填寫您的球員資料...</div>`;
+    async function saveProfile(isEdit) {
+        const name = document.getElementById('setup-name').value;
+        const hc = parseFloat(document.getElementById('setup-handicap').value);
+
+        if (!name) { alert("請填寫姓名"); return; }
+
+        showLoading("正在更新球員檔案...");
+
+        try {
+            if (isEdit) {
+                const { error } = await supabaseClient.from('users').update({ real_name: name, initial_handicap: hc }).eq('id', state.dbUser.id);
+                if (error) throw error;
+            } else {
+                const { data, error } = await supabaseClient.from('users').insert([{
+                    line_uid: state.userProfile.userId,
+                    line_display_name: state.userProfile.displayName,
+                    real_name: name,
+                    initial_handicap: hc
+                }]).select().single();
+                if (error) throw error;
+                state.dbUser = data;
+            }
+
+            alert("更新成功！");
+            location.reload(); // 重新整理以獲取最新狀態
+        } catch (err) {
+            alert("儲存失敗：" + err.message);
+            hideLoading();
+        }
     }
 
     // 啟動
