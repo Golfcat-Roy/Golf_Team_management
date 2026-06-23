@@ -337,44 +337,105 @@
     }
 
     async function renderHistory() {
-        document.getElementById('header-title').innerText = "歷史成績";
-        // 複用原本 renderMe 裡的統計與列表邏輯
-        showLoading("正在統計戰績...");
+        document.getElementById('header-title').innerText = "個人與球隊歷史";
+        showLoading("正在統計戰績與載入歷史...");
+
         try {
-            const { data: scores } = await supabaseClient
+            // 1. 獲取個人戰績 (Birdies, Eagles, Pars)
+            const { data: personalScores } = await supabaseClient
                 .from('scores')
                 .select('*, events(*)')
                 .eq('team_member_id', state.myMemberId)
                 .order('created_at', { ascending: false });
 
+            let stats = { birdie: 0, eagle: 0, par: 0, total: personalScores?.length || 0 };
+            personalScores?.forEach(s => {
+                const pars = s.events.pars || Array(18).fill(4);
+                s.hole_scores.forEach((h, i) => {
+                    if (h <= 0) return;
+                    const diff = h - pars[i];
+                    if (diff <= -2) stats.eagle++;
+                    else if (diff === -1) stats.birdie++;
+                    else if (diff === 0) stats.par++;
+                });
+            });
+
+            // 2. 獲取球隊歷史
+            const { data: teamHistory } = await supabaseClient
+                .from('events')
+                .select('*')
+                .eq('team_id', state.activeTeam.id)
+                .eq('registration_status', 'closed')
+                .order('date', { ascending: false });
+
             hideLoading();
             const container = document.getElementById('page-container');
-            let historyHtml = scores?.map(s => `
-                <div onclick="viewScorecard('${s.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:bg-gray-50 transition-all">
-                    <div>
-                        <p class="font-bold text-gray-900 text-sm">${s.events.title}</p>
-                        <p class="text-[10px] text-gray-400 mt-1">📅 ${s.events.date}</p>
+
+            // 渲染頂部個人統計卡片 (對齊 App)
+            let statsHtml = `
+                <div class="grid grid-cols-3 gap-3 mb-8">
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-emerald-50 text-center">
+                        <p class="text-2xl font-black text-emerald-600">${stats.birdie}</p>
+                        <p class="text-[9px] text-gray-400 uppercase font-bold tracking-widest">Birdies</p>
                     </div>
-                    <div class="text-right">
-                        <p class="text-lg font-black text-[#133B2B]">${s.gross_score}</p>
-                        <p class="text-[9px] text-gray-400 uppercase">Gross</p>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-amber-50 text-center">
+                        <p class="text-2xl font-black text-amber-500">${stats.eagle}</p>
+                        <p class="text-[9px] text-gray-400 uppercase font-bold tracking-widest">Eagles+</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-blue-50 text-center">
+                        <p class="text-2xl font-black text-blue-500">${stats.par}</p>
+                        <p class="text-[9px] text-gray-400 uppercase font-bold tracking-widest">Pars</p>
                     </div>
                 </div>
-            `).join('') || "<p class='text-center py-10 text-gray-400'>尚無參賽紀錄</p>";
+            `;
+
+            // 渲染個人紀錄列表
+            let personalListHtml = personalScores?.map(s => `
+                <div onclick="viewScorecard('${s.id}')" class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center active:bg-gray-50 mb-3 transition-all">
+                    <div class="flex-1">
+                        <p class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter mb-1">${s.events.date.replace(/-/g, '.')}</p>
+                        <p class="font-black text-gray-900 leading-tight">${s.events.title}</p>
+                        <div class="flex items-center space-x-3 mt-2">
+                            <span class="text-xs text-[#04432C] font-black">Gross: ${s.gross_score}</span>
+                            ${s.net_score ? `<span class="text-xs text-emerald-600 font-bold">Net: ${s.net_score}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="shrink-0 w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-700">📊</div>
+                </div>
+            `).join('') || "<div class='text-center py-20 text-gray-300 italic text-sm'>尚無參賽紀錄</div>";
+
+            // 渲染球隊歷史列表
+            let teamListHtml = teamHistory?.map(e => `
+                <div onclick="renderLeaderboard('${e.id}')" class="bg-[#04432C] p-5 rounded-3xl shadow-lg border border-emerald-900 flex justify-between items-center active:scale-95 mb-3 transition-all group">
+                    <div class="flex-1 text-white">
+                        <p class="text-[10px] opacity-50 font-bold uppercase mb-1">${e.date.replace(/-/g, '.')}</p>
+                        <p class="font-black leading-tight">${e.title}</p>
+                        <p class="text-[10px] opacity-70 mt-2">📍 ${e.location}</p>
+                    </div>
+                    <span class="text-white opacity-30 group-active:opacity-100">▶</span>
+                </div>
+            `).join('') || "<div class='text-center py-20 text-gray-300 italic text-sm'>球隊尚無已結賽事</div>";
 
             container.innerHTML = `
-                <div class="space-y-4">
-                    <div class="bg-[#133B2B] text-white p-5 rounded-2xl shadow-lg">
-                        <h4 class="text-[10px] opacity-70 uppercase tracking-widest mb-1">我的表現彙總</h4>
-                        <p class="text-lg font-bold">歷史戰績牆 (History)</p>
+                <div class="fade-in">
+                    ${statsHtml}
+
+                    <div class="flex items-center justify-between mb-4 px-1">
+                        <h4 class="text-[11px] font-black text-gray-400 uppercase tracking-widest">個人戰績 (Personal)</h4>
                     </div>
-                    ${historyHtml}
+                    <div class="mb-8">${personalListHtml}</div>
+
+                    <div class="flex items-center justify-between mb-4 px-1">
+                        <h4 class="text-[11px] font-black text-gray-400 uppercase tracking-widest">球隊歷史 (Team History)</h4>
+                    </div>
+                    <div>${teamListHtml}</div>
+
                     <div id="scorecard-modal" class="hidden fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm"></div>
                 </div>
             `;
         } catch (e) {
             hideLoading();
-            alert("載入歷史失敗");
+            alert("載入歷史失敗：" + e.message);
         }
     }
 
@@ -1102,36 +1163,56 @@
     }
 
     function renderTeams() {
-        document.getElementById('header-title').innerText = "我的球隊";
+        document.getElementById('header-title').innerText = "球隊管理中心";
         const container = document.getElementById('page-container');
 
-        let teamsHtml = state.myTeams.map(t => `
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
-                <div class="flex justify-between items-center">
-                    <h3 class="font-bold text-gray-900 text-lg">${t.name}</h3>
-                    <span class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md font-bold">${state.myRole === 'admin' ? '管理者' : '隊員'}</span>
-                </div>
-                <p class="text-xs text-gray-400 mt-1">球隊代碼：${t.join_code}</p>
-
-                ${isAdmin() ? `
-                    <div class="grid grid-cols-2 gap-3 mt-4">
-                        <button onclick="renderMemberManagement('${t.id}')" class="py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md">成員管理</button>
-                        <button onclick="renderCreateEvent('${t.id}')" class="py-2 bg-[#04432C] text-white rounded-xl text-xs font-bold shadow-md">建立新賽事</button>
+        let teamsHtml = state.myTeams.map(t => {
+            const isTeamAdmin = state.myRole === 'admin' || state.myRole === 'president' || state.myRole === 'vice_president';
+            return `
+                <div class="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 mb-6 fade-in">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="font-black text-gray-900 text-xl">${t.name}</h3>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Join Code: ${t.join_code}</p>
+                        </div>
+                        <span class="text-[10px] bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full font-black uppercase tracking-tighter">${state.myRole === 'admin' ? 'Manager' : 'Member'}</span>
                     </div>
-                ` : ''}
-            </div>
-        `).join('');
+
+                    <div class="bg-gray-50 rounded-2xl p-4 flex items-center mb-6">
+                        <div class="flex-1 border-r border-gray-200 pr-4">
+                            <p class="text-[9px] text-gray-400 font-bold uppercase mb-1">Subscription</p>
+                            <p class="text-sm font-black text-[#04432C]">Free 基礎版</p>
+                        </div>
+                        <div class="flex-1 pl-4">
+                            <p class="text-[9px] text-gray-400 font-bold uppercase mb-1">Limit</p>
+                            <p class="text-sm font-black text-[#04432C]">${t.member_limit || 30} 人</p>
+                        </div>
+                    </div>
+
+                    ${isAdmin() ? `
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <button onclick="renderMemberManagement('${t.id}')" class="py-4 bg-[#04432C] text-white rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all uppercase">成員管理</button>
+                            <button onclick="renderCreateEvent('${t.id}')" class="py-4 bg-emerald-600 text-white rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all uppercase">建立賽事</button>
+                        </div>
+                    ` : `
+                        <div class="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                            <p class="text-[10px] text-amber-700 leading-relaxed font-medium">💡 您目前是該球隊隊員。如需管理權限，請洽詢球隊總幹事。</p>
+                        </div>
+                    `}
+                </div>
+            `;
+        }).join('');
 
         container.innerHTML = `
             <div class="space-y-4">
                 ${teamsHtml}
-                <div class="bg-emerald-50 p-6 rounded-3xl border border-dashed border-emerald-200 text-center">
-                    <h4 class="font-bold text-emerald-800">加入其他球隊</h4>
-                    <p class="text-[11px] text-emerald-600 mt-1">請輸入由球隊管理員提供的六位數代碼</p>
-                    <div class="mt-4 flex space-x-2">
-                        <input type="text" id="join-code-input" maxlength="6" class="flex-1 bg-white border-none rounded-xl p-3 text-center font-mono text-lg tracking-widest focus:ring-2 focus:ring-[#133B2B]" placeholder="000000">
-                        <button onclick="joinTeam()" class="bg-[#133B2B] text-white px-6 rounded-xl font-bold text-sm">加入</button>
+                <div class="bg-white p-8 rounded-[32px] border-2 border-dashed border-gray-100 text-center shadow-inner">
+                    <h4 class="font-black text-gray-400 uppercase tracking-widest text-xs mb-4">Join New Team</h4>
+                    <div class="flex space-x-2 bg-gray-50 p-2 rounded-2xl">
+                        <input type="text" id="join-code-input" maxlength="6" class="flex-1 bg-transparent border-none p-3 text-center font-black text-2xl tracking-[0.5em] text-[#04432C] focus:ring-0" placeholder="000000">
+                        <button onclick="joinTeam()" class="bg-[#04432C] text-white px-6 rounded-xl font-black text-sm uppercase">加入</button>
                     </div>
+                    <p class="text-[10px] text-gray-300 font-bold mt-4">請輸入六位數球隊邀請代碼</p>
                 </div>
             </div>
         `;
@@ -1257,65 +1338,94 @@
     }
 
     async function renderLeaderboard(targetEventId = null) {
-        const eventId = targetEventId || state.scoring.eventId || (state.activeTeam ? await getLatestEventId() : null);
-        if (!eventId) {
-            document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>目前無進行中的賽事排行榜</div>`;
+        // 如果傳入了特定賽事 ID，顯示該賽事的成績排行
+        if (targetEventId) {
+            renderEventLeaderboard(targetEventId);
             return;
         }
 
-        document.getElementById('header-title').innerText = "即時成績";
-        showLoading("正在從雲端計算排名...");
+        // 否則，顯示全隊排行榜 (對齊 LeaderboardTab.kt)
+        document.getElementById('header-title').innerText = "球隊排行榜";
+        showLoading("正在更新球隊排名...");
 
         try {
-            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
-            const { data: scores, error } = await supabaseClient
-                .from('scores')
-                .select('*, team_members(users(*))')
-                .eq('event_id', eventId);
+            const { data: members, error } = await supabaseClient
+                .from('team_members')
+                .select('*, users(*)')
+                .eq('team_id', state.activeTeam.id)
+                .order('current_team_handicap', { ascending: true });
 
             if (error) throw error;
 
             hideLoading();
             const container = document.getElementById('page-container');
-            container.innerHTML = `
-                <div class="bg-[#04432C] text-white p-5 rounded-3xl shadow-lg mb-6 relative overflow-hidden">
-                    <div class="relative z-10">
-                        <h4 class="text-[10px] opacity-70 uppercase tracking-widest mb-1">Live Leaderboard</h4>
-                        <p class="text-lg font-black">${event.title}</p>
-                        <p class="text-[10px] opacity-50 mt-1 uppercase tracking-tighter">🏆 ${event.handicap_rule.replace(/_/g, ' ')}</p>
+
+            const listHtml = members.map((m, index) => {
+                // 定義金銀銅牌顏色 (對齊 App)
+                const rankColor = index === 0 ? 'text-amber-400' : index === 1 ? 'text-gray-400' : index === 2 ? 'text-amber-700' : 'text-gray-300';
+                const roleName = {
+                    'president': '會長',
+                    'vice_president': '副會長',
+                    'admin': '總幹事',
+                    'vice_admin': '副總幹事',
+                    'member': '隊員',
+                    'guest': '來賓'
+                }[m.role] || '隊員';
+
+                return `
+                    <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex items-center mb-4 active:scale-95 transition-all">
+                        <div class="w-12 shrink-0 flex flex-col items-center justify-center border-r border-gray-50 mr-4">
+                            <span class="text-2xl font-black ${rankColor}">${index + 1}</span>
+                        </div>
+                        <div class="flex-1">
+                            <h4 class="font-black text-gray-900 text-lg leading-tight">${m.users.real_name}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">${roleName}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] text-gray-300 font-bold uppercase tracking-widest">Handicap</p>
+                            <p class="text-2xl font-black text-[#04432C]">${m.current_team_handicap}</p>
+                        </div>
                     </div>
-                    <div class="absolute -right-4 -bottom-4 text-white/5 text-6xl font-black italic">RANK</div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="fade-in">
+                    <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 mb-6 text-center">
+                        <p class="text-[10px] text-emerald-700 font-black uppercase tracking-widest mb-1">Team Ranking</p>
+                        <h3 class="text-xl font-black text-[#04432C]">${state.activeTeam.name}</h3>
+                        <p class="text-xs text-emerald-600/60 mt-1">目前依據球隊差點進行動態排名</p>
+                    </div>
+                    ${listHtml}
                 </div>
-                <div id="leaderboard-list" class="space-y-3"></div>
-                <button onclick="switchTab(0)" class="w-full py-6 text-gray-400 text-xs font-bold uppercase tracking-widest">返回賽事列表</button>
             `;
+        } catch (err) {
+            alert("載入排行榜失敗");
+            hideLoading();
+        }
+    }
 
-            const list = document.getElementById('leaderboard-list');
-            if (!scores || scores.length === 0) {
-                list.innerHTML = `<div class='text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200 text-gray-300'>尚未有球員繳交成績</div>`;
-                return;
-            }
+    // 獨立出來的「賽事排行」渲染邏輯 (對齊 EventLeaderboardScreen.kt)
+    async function renderEventLeaderboard(eventId) {
+        document.getElementById('header-title').innerText = "賽事即時成績";
+        showLoading("正在計算賽事排名...");
+        try {
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            const { data: scores } = await supabaseClient.from('scores').select('*, team_members(users(*))').eq('event_id', eventId);
 
-            // [對齊 App 版專業排序邏輯]
+            hideLoading();
+            const container = document.getElementById('page-container');
+
             const eventPars = event.pars || Array(18).fill(4);
             const processed = scores.map(s => {
                 const holeScores = s.hole_scores || [];
                 const holesPlayed = holeScores.filter(h => h > 0).length;
                 const isFinished = holesPlayed === 18;
-
-                // 計算 To Par
                 let toPar = 0;
-                holeScores.forEach((score, i) => {
-                    if (score > 0) toPar += (score - eventPars[i]);
-                });
-
+                holeScores.forEach((score, i) => { if (score > 0) toPar += (score - eventPars[i]); });
                 return { ...s, holesPlayed, isFinished, toPar };
             });
 
-            // 排序邏輯：
-            // 1. 完賽者優先
-            // 2. 完賽者依 Gross Score (低到高)
-            // 3. 未完賽者依 To Par (低到高)
             const sorted = processed.sort((a, b) => {
                 if (a.isFinished && b.isFinished) return a.gross_score - b.gross_score;
                 if (a.isFinished && !b.isFinished) return -1;
@@ -1323,35 +1433,49 @@
                 return a.toPar - b.toPar;
             });
 
-            sorted.forEach((s, index) => {
+            const listHtml = sorted.map((s, index) => {
                 const toParText = s.toPar === 0 ? "E" : (s.toPar > 0 ? `+${s.toPar}` : s.toPar);
                 const toParClass = s.toPar < 0 ? "text-amber-500" : (s.toPar > 0 ? "text-rose-500" : "text-emerald-700");
 
-                const row = document.createElement('div');
-                row.className = "bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-95 transition-all";
-                row.innerHTML = `
-                    <div class="flex items-center space-x-4">
-                        <span class="w-8 h-8 flex items-center justify-center rounded-full ${index < 3 ? 'bg-amber-100 text-amber-700 font-black' : 'text-gray-300 font-bold'} text-xs">
-                            ${index + 1}
-                        </span>
-                        <div>
-                            <p class="font-black text-gray-900 leading-tight">${s.team_members.users.real_name}</p>
-                            <p class="text-[10px] text-gray-400 mt-0.5">已完賽 ${s.holesPlayed} 洞 ${s.isFinished ? '(F)' : ''}</p>
+                return `
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-4">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-full ${index < 3 ? 'bg-amber-100 text-amber-700 font-black' : 'text-gray-300 font-bold'} text-xs">
+                                ${index + 1}
+                            </span>
+                            <div>
+                                <p class="font-black text-gray-900 leading-tight">${s.team_members.users.real_name}</p>
+                                <p class="text-[10px] text-gray-400 mt-0.5">已完賽 ${s.holesPlayed} 洞 ${s.isFinished ? '(F)' : ''}</p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="flex items-center space-x-6">
-                        <div class="text-right">
-                            <p class="text-xs font-black ${toParClass}">${toParText}</p>
-                            <p class="text-[8px] text-gray-300 uppercase font-bold tracking-tighter">To Par</p>
-                        </div>
-                        <div class="text-right border-l border-gray-100 pl-4">
-                            <p class="text-xl font-black text-[#04432C]">${s.gross_score}</p>
-                            <p class="text-[8px] text-gray-400 uppercase font-bold tracking-tighter">Gross</p>
+                        <div class="flex items-center space-x-6">
+                            <div class="text-right">
+                                <p class="text-xs font-black ${toParClass}">${toParText}</p>
+                                <p class="text-[8px] text-gray-300 uppercase font-bold tracking-tighter">To Par</p>
+                            </div>
+                            <div class="text-right border-l border-gray-100 pl-4">
+                                <p class="text-xl font-black text-[#04432C]">${s.gross_score}</p>
+                                <p class="text-[8px] text-gray-400 uppercase font-bold tracking-tighter">Gross</p>
+                            </div>
                         </div>
                     </div>
                 `;
-                list.appendChild(row);
-            });
+            }).join('');
+
+            container.innerHTML = `
+                <div class="fade-in">
+                    <div class="bg-[#04432C] text-white p-5 rounded-3xl shadow-lg mb-6 relative overflow-hidden">
+                        <div class="relative z-10">
+                            <h4 class="text-[10px] opacity-70 uppercase tracking-widest mb-1">Live Leaderboard</h4>
+                            <p class="text-lg font-black">${event.title}</p>
+                            <p class="text-[10px] opacity-50 mt-1 uppercase tracking-tighter">🏆 ${event.handicap_rule.replace(/_/g, ' ')}</p>
+                        </div>
+                        <div class="absolute -right-4 -bottom-4 text-white/5 text-6xl font-black italic">RANK</div>
+                    </div>
+                    ${listHtml}
+                    <button onclick="renderHistory()" class="w-full py-6 text-gray-400 text-xs font-bold uppercase tracking-widest mt-4">◀ 返回歷史列表</button>
+                </div>
+            `;
         } catch (err) {
             console.error(err);
             alert("載入排行榜失敗");
@@ -1697,71 +1821,151 @@
         } catch (err) { alert("操作失敗: " + err.message); }
     }
 
-    // [第二階段新增] 成員管理頁面
+    // --- 成員管理分頁 (100% 移植自 TeamManagementTab.kt) ---
     async function renderMemberManagement(teamId) {
-        document.getElementById('header-title').innerText = "成員管理";
+        document.getElementById('header-title').innerText = "球隊成員管理";
         showLoading("正在載入成員清單...");
 
         try {
-            const { data: members } = await supabaseClient
+            const { data: members, error } = await supabaseClient
                 .from('team_members')
                 .select('*, users(*)')
                 .eq('team_id', teamId)
                 .order('role', { ascending: true });
 
+            if (error) throw error;
             hideLoading();
+
             const container = document.getElementById('page-container');
+            const isAdminRole = (r) => r === 'admin' || r === 'president' || r === 'vice_president' || r === 'vice_admin';
+
+            const renderList = (filterType) => {
+                const filtered = members.filter(m => filterType === 'guest' ? m.role === 'guest' : m.role !== 'guest');
+                return filtered.map(m => {
+                    const roleName = {
+                        'president': '會長', 'vice_president': '副會長', 'admin': '總幹事', 'vice_admin': '副總幹事', 'member': '隊員', 'guest': '來賓'
+                    }[m.role] || '隊員';
+
+                    return `
+                        <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4 fade-in">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h4 class="font-black text-gray-900 text-lg">${m.users.real_name}</h4>
+                                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">${roleName} | HC: ${m.current_team_handicap}</p>
+                                </div>
+                                <div class="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 font-bold text-xs">
+                                    ${m.users.real_name.charAt(0)}
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="editHandicapDialog('${m.id}', ${m.current_team_handicap})" class="py-2 bg-gray-50 text-gray-600 rounded-xl text-[10px] font-black uppercase">改差點</button>
+                                ${m.role !== 'guest' ? `<button onclick="editRoleDialog('${m.id}', '${m.role}')" class="py-2 bg-gray-50 text-gray-600 rounded-xl text-[10px] font-black uppercase">換職務</button>` : '<div></div>'}
+                                <button onclick="removeMemberDialog('${m.id}', '${m.users.real_name}', '${m.role}')" class="py-2 bg-rose-50 text-rose-500 rounded-xl text-[10px] font-black uppercase">移除</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('') || `<p class="text-center py-20 text-gray-300 italic">目前無${filterType === 'guest' ? '來賓' : '正式成員'}</p>`;
+            };
+
             container.innerHTML = `
-                <div class="flex justify-between items-center mb-4">
-                    <button onclick="switchTab(3)" class="text-sm text-emerald-700 font-bold">◀ 返回球隊</button>
-                    <span class="text-xs text-gray-400">共 ${members?.length || 0} 位成員</span>
+                <div class="flex items-center space-x-2 mb-6">
+                    <button onclick="switchTab(3)" class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm text-gray-400">◀</button>
+                    <h3 class="font-black text-gray-400 uppercase tracking-widest text-xs">Member Management</h3>
                 </div>
-                <div id="member-list" class="space-y-3"></div>
+
+                <div class="flex p-1 bg-gray-200/50 rounded-2xl mb-6">
+                    <button id="tab-btn-regular" onclick="toggleMemberSubTab('regular')" class="flex-1 py-3 rounded-xl text-xs font-black transition-all bg-white shadow-sm text-[#04432C]">正式球員</button>
+                    <button id="tab-btn-guest" onclick="toggleMemberSubTab('guest')" class="flex-1 py-3 rounded-xl text-xs font-black transition-all text-gray-400">來賓名單</button>
+                </div>
+
+                <div id="member-list-regular">${renderList('regular')}</div>
+                <div id="member-list-guest" class="hidden">${renderList('guest')}</div>
             `;
 
-            const list = document.getElementById('member-list');
-            members.forEach(m => {
-                const card = document.createElement('div');
-                card.className = "bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between";
-                card.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 font-bold">
-                            ${m.users.real_name.charAt(0)}
-                        </div>
-                        <div>
-                            <p class="font-bold text-gray-900">${m.users.real_name}</p>
-                            <p class="text-[10px] text-gray-400">${m.role === 'admin' ? '管理者' : '隊員'} | HC: ${m.current_team_handicap}</p>
-                        </div>
-                    </div>
-                    <div class="flex space-x-2">
-                        <button onclick="editHandicap('${m.id}', ${m.current_team_handicap})" class="p-2 bg-gray-50 rounded-lg text-[10px] font-bold text-gray-600">改差點</button>
-                        ${m.user_id !== state.dbUser.id ? `<button onclick="removeMember('${m.id}')" class="p-2 bg-rose-50 rounded-lg text-[10px] font-bold text-rose-500">移除</button>` : ''}
-                    </div>
-                `;
-                list.appendChild(card);
-            });
-        } catch (err) { alert("載入失敗"); }
+            window.toggleMemberSubTab = (type) => {
+                const isRegular = type === 'regular';
+                document.getElementById('member-list-regular').classList.toggle('hidden', !isRegular);
+                document.getElementById('member-list-guest').classList.toggle('hidden', isRegular);
+                document.getElementById('tab-btn-regular').className = isRegular ? 'flex-1 py-3 rounded-xl text-xs font-black bg-white shadow-sm text-[#04432C]' : 'flex-1 py-3 rounded-xl text-xs font-black text-gray-400';
+                document.getElementById('tab-btn-guest').className = !isRegular ? 'flex-1 py-3 rounded-xl text-xs font-black bg-white shadow-sm text-[#04432C]' : 'flex-1 py-3 rounded-xl text-xs font-black text-gray-400';
+            };
+
+        } catch (err) { alert("載入成員失敗"); hideLoading(); }
     }
 
-    async function editHandicap(memberId, currentHC) {
-        const newHC = prompt("請輸入新的球隊差點：", currentHC);
-        if (newHC === null || isNaN(parseFloat(newHC))) return;
-
-        try {
-            const { error } = await supabaseClient.from('team_members').update({ current_team_handicap: parseFloat(newHC) }).eq('id', memberId);
-            if (error) throw error;
-            alert("差點已更新");
-            renderMemberManagement(state.activeTeam.id);
-        } catch (err) { alert("更新失敗"); }
+    // --- 管理互動 Dialog (對齊 App 邏輯) ---
+    function editHandicapDialog(memberId, currentHC) {
+        showModal(`
+            <div class="p-6">
+                <h3 class="font-black text-xl text-[#04432C] mb-4">修改球員差點</h3>
+                <input type="number" id="new-hc-input" value="${currentHC}" step="0.1" class="w-full bg-gray-50 border-none rounded-2xl p-4 text-center text-2xl font-black focus:ring-2 focus:ring-[#04432C] mb-6">
+                <div class="flex space-x-3">
+                    <button onclick="closeModal()" class="flex-1 py-4 bg-gray-100 text-gray-400 rounded-2xl font-bold">取消</button>
+                    <button onclick="confirmEditHandicap('${memberId}')" class="flex-2 py-4 bg-[#04432C] text-white rounded-2xl font-bold shadow-lg">確認修改</button>
+                </div>
+            </div>
+        `);
     }
 
-    async function removeMember(memberId) {
-        if (!confirm("確定要將此成員移除嗎？此動作不可撤銷。")) return;
+    async function confirmEditHandicap(memberId) {
+        const val = parseFloat(document.getElementById('new-hc-input').value);
+        showLoading("正在更新...");
         try {
-            const { error } = await supabaseClient.from('team_members').delete().eq('id', memberId);
-            if (error) throw error;
-            renderMemberManagement(state.activeTeam.id);
-        } catch (err) { alert("移除失敗"); }
+            await supabaseClient.from('team_members').update({ current_team_handicap: val }).eq('id', memberId);
+            closeModal(); renderMemberManagement(state.activeTeam.id);
+        } catch (e) { alert("更新失敗"); hideLoading(); }
+    }
+
+    function editRoleDialog(memberId, currentRole) {
+        const roles = [
+            {v:'president', n:'會長'}, {v:'vice_president', n:'副會長'},
+            {v:'admin', n:'總幹事'}, {v:'vice_admin', n:'副總幹事'}, {v:'member', n:'隊員'}
+        ];
+        const optionsHtml = roles.map(r => `
+            <div onclick="confirmEditRole('${memberId}', '${r.v}')" class="p-4 border-b border-gray-50 active:bg-emerald-50 flex justify-between items-center cursor-pointer">
+                <span class="font-bold ${currentRole === r.v ? 'text-emerald-600' : 'text-gray-700'}">${r.n}</span>
+                ${currentRole === r.v ? '<span>✅</span>' : ''}
+            </div>
+        `).join('');
+
+        showModal(`
+            <div class="p-6">
+                <h3 class="font-black text-xl text-[#04432C] mb-4">變更成員職務</h3>
+                <div class="bg-gray-50 rounded-3xl overflow-hidden mb-6">${optionsHtml}</div>
+                <button onclick="closeModal()" class="w-full py-4 bg-gray-100 text-gray-400 rounded-2xl font-bold">取消</button>
+            </div>
+        `);
+    }
+
+    async function confirmEditRole(memberId, newRole) {
+        showLoading("正在變更職務...");
+        try {
+            await supabaseClient.from('team_members').update({ role: newRole }).eq('id', memberId);
+            closeModal(); renderMemberManagement(state.activeTeam.id);
+        } catch (e) { alert("變更失敗"); hideLoading(); }
+    }
+
+    function removeMemberDialog(memberId, name, role) {
+        const isAdmin = role === 'admin' || role === 'president';
+        showModal(`
+            <div class="p-6">
+                <h3 class="font-black text-xl text-rose-600 mb-2">確認移除成員</h3>
+                <p class="text-sm text-gray-500 mb-6">確定要將 <span class="font-black text-gray-900">${name}</span> 從球隊中移除嗎？此動作將立即生效且無法復原。</p>
+                <div class="flex space-x-3">
+                    <button onclick="closeModal()" class="flex-1 py-4 bg-gray-100 text-gray-400 rounded-2xl font-bold">先不要</button>
+                    <button onclick="confirmRemoveMember('${memberId}')" class="flex-2 py-4 bg-rose-500 text-white rounded-2xl font-bold shadow-lg">確認移除</button>
+                </div>
+            </div>
+        `);
+    }
+
+    async function confirmRemoveMember(memberId) {
+        showLoading("正在移除...");
+        try {
+            await supabaseClient.from('team_members').delete().eq('id', memberId);
+            closeModal(); renderMemberManagement(state.activeTeam.id);
+        } catch (e) { alert("移除失敗"); hideLoading(); }
     }
 
     // 啟動
