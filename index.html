@@ -779,33 +779,144 @@
         return data?.id;
     }
 
-    function renderMe() {
+    async function renderMe() {
         document.getElementById('header-title').innerText = "個人中心";
-        document.getElementById('page-container').innerHTML = `
-            <div class='bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col items-center text-center'>
-                <div class="relative">
-                    <img src="${state.userProfile.pictureUrl}" class="w-24 h-24 rounded-full border-4 border-white shadow-xl mb-4">
-                    <div class="absolute bottom-4 right-0 bg-emerald-500 w-6 h-6 rounded-full border-2 border-white"></div>
-                </div>
-                <h3 class="font-bold text-2xl text-gray-900">${state.dbUser.real_name}</h3>
-                <p class="text-sm text-gray-400 mt-1">LINE: ${state.userProfile.displayName}</p>
+        showLoading("正在統計戰績...");
 
-                <div class="grid grid-cols-2 gap-4 w-full mt-8">
-                    <div class="bg-gray-50 p-4 rounded-2xl">
-                        <p class="text-[10px] text-gray-400 uppercase">目前差點</p>
-                        <p class="text-xl font-bold text-emerald-700">${state.dbUser.initial_handicap}</p>
+        try {
+            // 1. 獲取所有個人成績
+            const { data: scores, error } = await supabaseClient
+                .from('scores')
+                .select('*, events(*)')
+                .eq('team_member_id', state.myMemberId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // 2. 計算統計數據
+            let stats = { birdie: 0, eagle: 0, par: 0, totalGames: scores?.length || 0 };
+            scores?.forEach(s => {
+                const pars = s.events.pars || Array(18).fill(4);
+                s.hole_scores.forEach((h, i) => {
+                    if (h <= 0) return;
+                    const diff = h - pars[i];
+                    if (diff <= -2) stats.eagle++;
+                    else if (diff === -1) stats.birdie++;
+                    else if (diff === 0) stats.par++;
+                });
+            });
+
+            hideLoading();
+            const container = document.getElementById('page-container');
+
+            // 渲染統計頭部
+            let historyHtml = scores?.map(s => `
+                <div onclick="viewScorecard('${s.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:bg-gray-50 transition-all">
+                    <div>
+                        <p class="font-bold text-gray-900">${s.events.title}</p>
+                        <p class="text-[10px] text-gray-400 mt-1">📅 ${s.events.date}</p>
                     </div>
-                    <div class="bg-gray-50 p-4 rounded-2xl">
-                        <p class="text-[10px] text-gray-400 uppercase">所屬球隊</p>
-                        <p class="text-xl font-bold text-gray-700">${state.myTeams.length}</p>
+                    <div class="text-right">
+                        <p class="text-lg font-black text-[#133B2B]">${s.gross_score}</p>
+                        <p class="text-[9px] text-gray-400 uppercase">Gross</p>
+                    </div>
+                </div>
+            `).join('') || "<p class='text-center py-10 text-gray-400'>尚無參賽紀錄</p>";
+
+            container.innerHTML = `
+                <div class='bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col items-center text-center'>
+                    <div class="relative">
+                        <img src="${state.userProfile.pictureUrl}" class="w-20 h-20 rounded-full border-4 border-white shadow-xl mb-3">
+                        <div class="absolute bottom-2 right-0 bg-emerald-500 w-5 h-5 rounded-full border-2 border-white"></div>
+                    </div>
+                    <h3 class="font-bold text-xl text-gray-900">${state.dbUser.real_name}</h3>
+                    <p class="text-xs text-gray-400">目前差點: <span class="font-bold text-emerald-700">${state.dbUser.initial_handicap}</span></p>
+
+                    <div class="grid grid-cols-3 gap-2 w-full mt-6">
+                        <div class="bg-amber-50 p-3 rounded-2xl border border-amber-100">
+                            <p class="text-[9px] text-amber-600 font-bold uppercase">Birdie</p>
+                            <p class="text-lg font-black text-amber-700">${stats.birdie}</p>
+                        </div>
+                        <div class="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+                            <p class="text-[9px] text-emerald-600 font-bold uppercase">Par</p>
+                            <p class="text-lg font-black text-emerald-700">${stats.par}</p>
+                        </div>
+                        <div class="bg-blue-50 p-3 rounded-2xl border border-blue-100">
+                            <p class="text-[9px] text-blue-600 font-bold uppercase">Games</p>
+                            <p class="text-lg font-black text-blue-700">${stats.totalGames}</p>
+                        </div>
+                    </div>
+                    <button onclick="renderProfileSetup(true)" class="mt-4 text-[11px] text-gray-400 underline">修改個人資料</button>
+                </div>
+
+                <div class="mt-6">
+                    <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">歷史戰績 (Past Games)</h4>
+                    <div class="space-y-3">
+                        ${historyHtml}
                     </div>
                 </div>
 
-                <button onclick="renderProfileSetup(true)" class="mt-8 w-full py-4 bg-gray-900 text-white rounded-2xl font-bold shadow-lg transition-all active:scale-95">修改個人資料</button>
-                <button onclick="liff.logout(); location.reload();" class="mt-4 w-full py-4 text-red-500 font-medium">登出系統</button>
-            </div>
-            <p class="text-center text-[10px] text-gray-300 mt-4">GolfCat v2.0 Web Edition</p>
-        `;
+                <button onclick="liff.logout(); location.reload();" class="w-full py-4 text-red-400 text-sm font-medium mt-8">登出系統</button>
+                <div id="scorecard-modal" class="hidden fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm"></div>
+            `;
+        } catch (err) {
+            alert("獲取戰績失敗");
+            hideLoading();
+        }
+    }
+
+    async function viewScorecard(scoreId) {
+        const modal = document.getElementById('scorecard-modal');
+        modal.classList.remove('hidden');
+        modal.innerHTML = `<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>`;
+
+        try {
+            const { data: s } = await supabaseClient.from('scores').select('*, events(*)').eq('id', scoreId).single();
+            const pars = s.events.pars || Array(18).fill(4);
+
+            let holesHtml = '';
+            for (let i = 0; i < 18; i++) {
+                const score = s.hole_scores[i];
+                const par = pars[i];
+                const diff = score - par;
+                let colorClass = "bg-gray-50 text-gray-900";
+                if (score > 0) {
+                    if (diff <= -1) colorClass = "bg-amber-100 text-amber-700 font-bold border border-amber-300";
+                    else if (diff >= 1) colorClass = "bg-gray-200 text-gray-500";
+                }
+
+                holesHtml += `
+                    <div class="flex flex-col items-center">
+                        <span class="text-[8px] text-gray-400 mb-1">${i+1}</span>
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs ${colorClass}">${score || '-'}</div>
+                        <span class="text-[8px] text-gray-300 mt-1">${par}</span>
+                    </div>
+                `;
+            }
+
+            modal.innerHTML = `
+                <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl fade-in">
+                    <div class="bg-[#133B2B] p-6 text-white text-center relative">
+                        <button onclick="document.getElementById('scorecard-modal').classList.add('hidden')" class="absolute top-4 right-4 text-white/50 text-xl">✕</button>
+                        <h3 class="font-bold text-lg">${s.events.title}</h3>
+                        <p class="text-xs opacity-60 mt-1">Scorecard Summary</p>
+                        <div class="mt-4 flex justify-around border-t border-white/10 pt-4">
+                            <div><p class="text-[10px] opacity-50">GROSS</p><p class="text-2xl font-black">${s.gross_score}</p></div>
+                            <div><p class="text-[10px] opacity-50">DATE</p><p class="text-sm font-bold mt-1">${s.events.date}</p></div>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-6 gap-3 mb-6">
+                            ${holesHtml}
+                        </div>
+                        <button onclick="document.getElementById('scorecard-modal').classList.add('hidden')" class="w-full py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold">關閉視窗</button>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            modal.classList.add('hidden');
+            alert("載入成績單失敗");
+        }
     }
 
     function renderProfileSetup(isEdit = false) {
