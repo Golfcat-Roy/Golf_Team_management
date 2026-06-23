@@ -436,8 +436,28 @@
 
             events.forEach(event => {
                 const isRegistered = registeredIds.has(event.id);
+                const isStarted = event.registration_status === 'started';
+                const isClosed = event.registration_status === 'closed';
+
                 const card = document.createElement('div');
-                card.className = "bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col space-y-4";
+                card.className = `bg-white rounded-2xl p-5 shadow-sm border ${isStarted ? 'border-emerald-500' : 'border-gray-100'} flex flex-col space-y-4`;
+
+                let adminActions = '';
+                if (isAdmin()) {
+                    adminActions = `
+                        <div class="border-t border-dashed border-gray-100 pt-3 mt-1 space-y-2">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">管理員工具</p>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="toggleEventStatus('${event.id}', '${event.registration_status}')" class="py-2 ${isStarted ? 'bg-rose-500' : 'bg-emerald-600'} text-white rounded-lg text-[11px] font-bold">
+                                    ${isStarted ? '結束球賽' : '開始球賽'}
+                                </button>
+                                <button onclick="archiveEvent('${event.id}')" class="py-2 bg-gray-400 text-white rounded-lg text-[11px] font-bold">
+                                    列表移除
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
 
                 card.innerHTML = `
                     <div class="flex justify-between items-start">
@@ -448,8 +468,8 @@
                                 <span class="flex items-center">📍 ${event.location}</span>
                             </div>
                         </div>
-                        <span class="px-2 py-1 rounded-md text-[10px] font-bold ${isRegistered ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}">
-                            ${isRegistered ? '已報名' : '未報名'}
+                        <span class="px-2 py-1 rounded-md text-[10px] font-bold ${isStarted ? 'bg-amber-100 text-amber-700' : isRegistered ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}">
+                            ${isStarted ? '進行中' : isClosed ? '已結賽' : isRegistered ? '已報名' : '未報名'}
                         </span>
                     </div>
 
@@ -458,15 +478,18 @@
                         <div>規則：<span class="text-gray-900 font-medium">${event.handicap_rule}</span></div>
                     </div>
 
-                    ${isRegistered
-                        ? `
+                    ${!isClosed ? `
                         <div class="grid grid-cols-2 gap-3">
-                            <button onclick="cancelReg('${event.id}', '${memberId}')" class="w-full py-3 bg-white border border-red-200 text-red-500 rounded-xl font-bold text-sm transition-all active:scale-95">取消報名</button>
+                            ${isRegistered
+                                ? `<button onclick="cancelReg('${event.id}', '${memberId}')" class="w-full py-3 bg-white border border-red-200 text-red-500 rounded-xl font-bold text-sm transition-all active:scale-95">取消報名</button>`
+                                : `<button onclick="doReg('${event.id}', '${memberId}')" class="w-full py-3 bg-[#04432C] text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95">我要報名</button>`
+                            }
                             <button onclick="startScoring('${event.id}')" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95">成績登錄</button>
                         </div>
-                        `
-                        : `<button onclick="doReg('${event.id}', '${memberId}')" class="w-full py-3 bg-[#133B2B] text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95">我要報名</button>`
-                    }
+                    ` : `
+                        <button onclick="renderLeaderboard('${event.id}')" class="w-full py-3 bg-gray-800 text-white rounded-xl font-bold text-sm">查看最終成績 🏆</button>
+                    `}
+                    ${adminActions}
                 `;
                 listContainer.appendChild(card);
             });
@@ -743,8 +766,8 @@
 
                 ${isAdmin() ? `
                     <div class="grid grid-cols-2 gap-3 mt-4">
-                        <button onclick="alert('功能開發中')" class="py-2 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold border border-gray-200">球隊設定</button>
-                        <button onclick="renderCreateEvent('${t.id}')" class="py-2 bg-[#133B2B] text-white rounded-xl text-xs font-bold">建立新賽事</button>
+                        <button onclick="renderMemberManagement('${t.id}')" class="py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md">成員管理</button>
+                        <button onclick="renderCreateEvent('${t.id}')" class="py-2 bg-[#04432C] text-white rounded-xl text-xs font-bold shadow-md">建立新賽事</button>
                     </div>
                 ` : ''}
             </div>
@@ -1246,6 +1269,96 @@
             alert("建立失敗：" + err.message);
             hideLoading();
         }
+    }
+
+    // [第二階段新增] 管理員動作
+    async function toggleEventStatus(eventId, currentStatus) {
+        const nextStatus = currentStatus === 'started' ? 'closed' : 'started';
+        const msg = currentStatus === 'started' ? "確定要結束球賽並封存成績嗎？" : "確定要開始球賽嗎？開始後球員將可輸入成績。";
+        if (!confirm(msg)) return;
+
+        try {
+            const { error } = await supabaseClient.from('events').update({ registration_status: nextStatus }).eq('id', eventId);
+            if (error) throw error;
+            renderEvents();
+        } catch (err) { alert("更新失敗: " + err.message); }
+    }
+
+    async function archiveEvent(eventId) {
+        if (!confirm("確定要將此賽事從清單移除嗎？(不會刪除歷史紀錄)")) return;
+        try {
+            const { error } = await supabaseClient.from('events').update({ is_archived_in_list: true }).eq('id', eventId);
+            if (error) throw error;
+            renderEvents();
+        } catch (err) { alert("操作失敗: " + err.message); }
+    }
+
+    // [第二階段新增] 成員管理頁面
+    async function renderMemberManagement(teamId) {
+        document.getElementById('header-title').innerText = "成員管理";
+        showLoading("正在載入成員清單...");
+
+        try {
+            const { data: members } = await supabaseClient
+                .from('team_members')
+                .select('*, users(*)')
+                .eq('team_id', teamId)
+                .order('role', { ascending: true });
+
+            hideLoading();
+            const container = document.getElementById('page-container');
+            container.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <button onclick="switchTab(3)" class="text-sm text-emerald-700 font-bold">◀ 返回球隊</button>
+                    <span class="text-xs text-gray-400">共 ${members?.length || 0} 位成員</span>
+                </div>
+                <div id="member-list" class="space-y-3"></div>
+            `;
+
+            const list = document.getElementById('member-list');
+            members.forEach(m => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between";
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 font-bold">
+                            ${m.users.real_name.charAt(0)}
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-900">${m.users.real_name}</p>
+                            <p class="text-[10px] text-gray-400">${m.role === 'admin' ? '管理者' : '隊員'} | HC: ${m.current_team_handicap}</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="editHandicap('${m.id}', ${m.current_team_handicap})" class="p-2 bg-gray-50 rounded-lg text-[10px] font-bold text-gray-600">改差點</button>
+                        ${m.user_id !== state.dbUser.id ? `<button onclick="removeMember('${m.id}')" class="p-2 bg-rose-50 rounded-lg text-[10px] font-bold text-rose-500">移除</button>` : ''}
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        } catch (err) { alert("載入失敗"); }
+    }
+
+    async function editHandicap(memberId, currentHC) {
+        const newHC = prompt("請輸入新的球隊差點：", currentHC);
+        if (newHC === null || isNaN(parseFloat(newHC))) return;
+
+        try {
+            const { error } = await supabaseClient.from('team_members').update({ current_team_handicap: parseFloat(nextHC) }).eq('id', memberId);
+            // 修正變數名稱錯誤，應該是 newHC
+            await supabaseClient.from('team_members').update({ current_team_handicap: parseFloat(newHC) }).eq('id', memberId);
+            alert("差點已更新");
+            renderMemberManagement(state.activeTeam.id);
+        } catch (err) { alert("更新失敗"); }
+    }
+
+    async function removeMember(memberId) {
+        if (!confirm("確定要將此成員移除嗎？此動作不可撤銷。")) return;
+        try {
+            const { error } = await supabaseClient.from('team_members').delete().eq('id', memberId);
+            if (error) throw error;
+            renderMemberManagement(state.activeTeam.id);
+        } catch (err) { alert("移除失敗"); }
     }
 
     // 啟動
