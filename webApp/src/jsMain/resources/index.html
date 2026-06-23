@@ -492,7 +492,7 @@
                 ${isAdmin() ? `
                     <div class="grid grid-cols-2 gap-3 mt-4">
                         <button onclick="alert('功能開發中')" class="py-2 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold border border-gray-200">球隊設定</button>
-                        <button onclick="alert('功能開發中')" class="py-2 bg-[#133B2B] text-white rounded-xl text-xs font-bold">建立新賽事</button>
+                        <button onclick="renderCreateEvent('${t.id}')" class="py-2 bg-[#133B2B] text-white rounded-xl text-xs font-bold">建立新賽事</button>
                     </div>
                 ` : ''}
             </div>
@@ -697,6 +697,104 @@
             location.reload(); // 重新整理以獲取最新狀態
         } catch (err) {
             alert("儲存失敗：" + err.message);
+            hideLoading();
+        }
+    }
+
+    // --- 賽事管理模組 ---
+    function renderCreateEvent(teamId) {
+        document.getElementById('header-title').innerText = "建立新賽事";
+        const container = document.getElementById('page-container');
+
+        let parInputsHtml = '';
+        for (let i = 1; i <= 18; i++) {
+            parInputsHtml += `
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] text-gray-400 mb-1">${i}</span>
+                    <input type="number" id="par-${i}" value="4" class="w-10 h-10 border border-gray-200 rounded-lg text-center text-sm focus:ring-1 focus:ring-[#133B2B]">
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="bg-white p-6 rounded-3xl shadow-sm space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">賽事名稱</label>
+                    <input type="text" id="event-title" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]" placeholder="例如：六月例行賽">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">比賽地點 (球場)</label>
+                    <input type="text" id="event-location" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]" placeholder="例如：大溪高爾夫球場">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">日期</label>
+                        <input type="date" id="event-date" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">開球時間</label>
+                        <input type="time" id="event-time" value="06:30" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">賽制規則</label>
+                    <select id="event-rule" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]">
+                        <option value="Stroke_Play">一般賽 (Stroke Play)</option>
+                        <option value="Match_Play">對抗賽 (Match Play)</option>
+                        <option value="New_Peoria">新貝利亞 (New Peoria)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">18 洞標準桿 (Pars)</label>
+                    <div class="grid grid-cols-6 gap-2 mt-2 bg-gray-50 p-4 rounded-2xl">
+                        ${parInputsHtml}
+                    </div>
+                </div>
+
+                <div class="pt-4 flex space-x-3">
+                    <button onclick="switchTab(1)" class="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold">取消</button>
+                    <button onclick="saveEvent('${teamId}')" class="flex-2 py-4 bg-[#133B2B] text-white rounded-2xl font-bold shadow-lg transition-all active:scale-95">儲存並發布</button>
+                </div>
+            </div>
+        `;
+    }
+
+    async function saveEvent(teamId) {
+        const title = document.getElementById('event-title').value;
+        const location = document.getElementById('event-location').value;
+        const date = document.getElementById('event-date').value;
+        const startTime = document.getElementById('event-time').value;
+        const rule = document.getElementById('event-rule').value;
+
+        if (!title || !location || !date) { alert("請填寫完整賽事資訊"); return; }
+
+        const pars = [];
+        for (let i = 1; i <= 18; i++) {
+            pars.push(parseInt(document.getElementById(`par-${i}`).value) || 4);
+        }
+
+        showLoading("正在建立賽事...");
+        try {
+            const { data, error } = await supabaseClient
+                .from('events')
+                .insert([{
+                    team_id: teamId,
+                    title: title,
+                    location: location,
+                    date: date,
+                    start_time: startTime,
+                    handicap_rule: rule,
+                    pars: pars,
+                    registration_status: 'open'
+                }]).select().single();
+
+            if (error) throw error;
+
+            alert("賽事建立成功！");
+            switchTab(0); // 跳轉回賽事清單
+        } catch (err) {
+            alert("建立失敗：" + err.message);
             hideLoading();
         }
     }
