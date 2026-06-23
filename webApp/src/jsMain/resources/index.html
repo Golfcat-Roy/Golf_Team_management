@@ -41,7 +41,7 @@
         .menu-item:last-child { border-bottom: none; }
 
         /* 浮動對話框樣式 */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; items-center: center; justify-content: center; padding: 20px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
         .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 24px; overflow: hidden; animation: slideUp 0.3s ease-out; }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
@@ -536,11 +536,11 @@
         const modal = document.getElementById('global-modal');
         const body = document.getElementById('modal-body');
         body.innerHTML = contentHtml;
-        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
     }
 
     function closeModal() {
-        document.getElementById('global-modal').classList.add('hidden');
+        document.getElementById('global-modal').style.display = 'none';
     }
 
     async function showParticipants(eventId) {
