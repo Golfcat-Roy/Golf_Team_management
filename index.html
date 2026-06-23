@@ -16,11 +16,11 @@
 
     <style>
         :root {
-            --primary: #133B2B;
-            --secondary: #2E7D32;
-            --background: #FAFAFA;
-            --surface: #FAFAFA;
-            --on-background: #1A1A1A;
+            --primary: #04432C;
+            --secondary: #10B981;
+            --background: #F3F4F6;
+            --surface: #FFFFFF;
+            --on-background: #1F2937;
         }
         body {
             font-family: 'Noto Sans TC', sans-serif;
@@ -32,7 +32,8 @@
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .active-tab { color: #10B981 !important; opacity: 1 !important; }
-        .tab-indicator { height: 4px; width: 40px; background-color: #10B981; border-radius: 2px; position: absolute; top: 0; }
+        /* 修改指示器：位於 Tab 頂部 */
+        .tab-indicator { height: 4px; width: 32px; background-color: #10B981; border-radius: 2px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
 
         /* 球隊選單樣式 */
         #team-menu { transition: all 0.2s ease-in-out; transform-origin: top; }
@@ -42,65 +43,77 @@
         /* 模擬 App 切換動畫 */
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 輔助樣式：Header 頭像 */
+        .avatar-small { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.3); }
     </style>
 </head>
 <body class="antialiased">
 
-<!-- 主要容器：限制最大寬度模擬手機感 -->
-<div class="max-w-md mx-auto h-screen bg-white flex flex-col relative shadow-2xl border-x border-gray-100">
+<!-- 主要容器 -->
+<div class="max-w-md mx-auto h-screen bg-[#F3F4F6] flex flex-col relative shadow-2xl border-x border-gray-200">
 
-    <!-- Header (對齊 App 標題列) -->
-    <header id="app-header" class="bg-[#133B2B] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-6 relative z-[60]">
-        <div id="header-left" class="w-6 text-xl cursor-pointer" onclick="renderProfileSetup(true)">👤</div>
-        <div class="flex items-center cursor-pointer" onclick="toggleTeamMenu()">
-            <span id="header-title">載入中...</span>
-            <span class="ml-1 text-xs opacity-60">▼</span>
+    <!-- Header (1:1 還原 App 頂部) -->
+    <header id="app-header" class="bg-[#04432C] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-4 relative z-[60]">
+        <!-- 左側：Logo -->
+        <div id="header-left" class="flex items-center space-x-2 cursor-pointer">
+            <div class="w-6 h-7 bg-red-600 rounded-sm flex items-center justify-center text-[10px] shadow-sm">🛡️</div>
         </div>
-        <div id="header-action" class="w-6 text-xl"></div>
+
+        <!-- 中間：標題與下拉 -->
+        <div class="flex items-center cursor-pointer ml-4" onclick="toggleTeamMenu()">
+            <span id="header-title" class="font-black">載入中...</span>
+            <span class="ml-1 text-[8px] opacity-70">▼</span>
+        </div>
+
+        <!-- 右側：頭像與登出 -->
+        <div id="header-right" class="flex items-center space-x-3">
+            <img id="user-avatar" src="" class="avatar-small hidden">
+            <span onclick="liff.logout(); location.reload();" class="text-[10px] text-rose-400 font-bold cursor-pointer">登出</span>
+        </div>
 
         <!-- 球隊下拉選單 -->
-        <div id="team-menu" class="hidden absolute top-16 left-1/2 -translate-x-1/2 w-64 bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2">
+        <div id="team-menu" class="hidden absolute top-14 left-1/2 -translate-x-1/2 w-64 bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2">
             <div id="team-list-container"></div>
             <div class="border-t border-gray-100 mt-2">
-                <div class="menu-item text-[#133B2B] text-sm font-bold flex items-center" onclick="switchTab(3)">
+                <div class="menu-item text-[#04432C] text-sm font-bold flex items-center" onclick="switchTab(3)">
                     <span class="mr-2">➕</span> 加入/建立球隊
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- 主內容區 (對齊 App 各個 Screen) -->
-    <main id="main-content" class="flex-1 overflow-y-auto no-scrollbar pb-20 bg-[#FAFAFA]">
+    <!-- 主內容區 -->
+    <main id="main-content" class="flex-1 overflow-y-auto no-scrollbar pb-20 bg-[#F3F4F6]">
         <div id="loading-screen" class="flex flex-col items-center justify-center h-full space-y-4">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#133B2B]"></div>
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#04432C]"></div>
             <p class="text-gray-500 text-sm">正在同步球員資料...</p>
         </div>
         <div id="page-container" class="hidden p-4 space-y-4">
-            <!-- 頁面內容將由 JavaScript 動態插入 -->
         </div>
     </main>
 
-    <!-- Bottom Navigation (對齊 App 的五個 Tab) -->
-    <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-[#133B2B] h-16 flex items-center justify-around text-white shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50">
+    <!-- Bottom Navigation (對齊 App 顏色與指示器) -->
+    <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-[#04432C] h-16 flex items-center justify-around text-white shadow-2xl z-50">
         <div onclick="switchTab(0)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">賽事列表</span>
+            <span class="text-[10px] font-bold mt-1">賽事列表</span>
         </div>
         <div onclick="switchTab(1)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">排行榜</span>
+            <span class="text-[10px] font-bold mt-1">排行榜</span>
         </div>
         <div onclick="switchTab(2)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">歷史成績</span>
+            <span class="text-[10px] font-bold mt-1">歷史成績</span>
         </div>
         <div onclick="switchTab(3)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">球隊管理</span>
+            <span class="text-[10px] font-bold mt-1">球隊管理</span>
         </div>
         <div onclick="switchTab(4)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60 transition-all">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] mt-1">使用說明</span>
+            <span class="text-[10px] font-bold mt-1">使用說明</span>
         </div>
     </nav>
 </div>
@@ -194,6 +207,39 @@
     function hideLoading() {
         document.getElementById('loading-screen').classList.add('hidden');
         document.getElementById('page-container').classList.remove('hidden');
+
+        // [第一階段新增] 更新 Header 頭像
+        if (state.userProfile?.pictureUrl) {
+            const avatar = document.getElementById('user-avatar');
+            avatar.src = state.userProfile.pictureUrl;
+            avatar.classList.remove('hidden');
+        }
+    }
+
+    // [第一階段新增] ScoreBadge 渲染器
+    function renderScoreBadge(score, par) {
+        if (!score || score <= 0) return `<div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs bg-gray-50 text-gray-300">-</div>`;
+
+        const diff = score - par;
+        let styleClass = "bg-gray-50 text-gray-900";
+        let symbolHtml = '';
+
+        if (diff <= -1) {
+            // Birdie or better (圓圈)
+            styleClass = "bg-amber-100 text-amber-700 font-bold border border-amber-300 relative";
+            symbolHtml = `<div class="absolute inset-0 border-2 border-amber-400 rounded-full m-1"></div>`;
+        } else if (diff >= 1) {
+            // Bogey or worse (方塊)
+            styleClass = "bg-gray-200 text-gray-500 border border-gray-400 relative";
+            symbolHtml = `<div class="absolute inset-0 border-2 border-gray-400 m-1"></div>`;
+        }
+
+        return `
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs ${styleClass}">
+                ${symbolHtml}
+                <span class="relative z-10">${score}</span>
+            </div>
+        `;
     }
 
     // --- 導覽與球隊切換邏輯 ---
@@ -1016,7 +1062,7 @@
                 holesHtml += `
                     <div class="flex flex-col items-center">
                         <span class="text-[8px] text-gray-400 mb-1">${i+1}</span>
-                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs ${colorClass}">${score || '-'}</div>
+                        ${renderScoreBadge(score, par)}
                         <span class="text-[8px] text-gray-300 mt-1">${par}</span>
                     </div>
                 `;
