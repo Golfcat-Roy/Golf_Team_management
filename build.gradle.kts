@@ -11,6 +11,7 @@ plugins {
 
 allprojects {
     configurations.all {
-        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+        // 使用 0.6.0 版，這在 Kotlin 2.x 中通常比 0.6.1 更穩定
+        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
     }
 }

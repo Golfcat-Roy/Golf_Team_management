@@ -13,7 +13,6 @@ fun main() {
     fun launchApp() {
         val root = document.getElementById("app-root")
         if (root != null) {
-            // 清理節點
             while (root.hasChildNodes()) {
                 root.removeChild(root.firstChild!!)
             }
@@ -32,7 +31,10 @@ fun main() {
         if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
             liff.login()
         } else {
-            launchApp()
+            // 在啟動前，我們先等待字體加載完成，這能有效減少亂碼機率
+            document.asDynamic().fonts.ready.then({
+                launchApp()
+            })
         }
     }, {
         launchApp()
