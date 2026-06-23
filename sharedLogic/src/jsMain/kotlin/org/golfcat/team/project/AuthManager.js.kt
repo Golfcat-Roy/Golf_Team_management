@@ -1,30 +1,26 @@
 package org.golfcat.team.project
 
 import org.golfcat.team.project.models.User
+import kotlinx.coroutines.await
 import kotlinx.browser.window
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 actual suspend fun loginWithLine(): User? {
-    val liff = window.asDynamic().liff ?: return null
-    
-    if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
-        liff.login()
+    val liff = window.asDynamic().liff
+    if (liff == null || !liff.isLoggedIn().unsafeCast<Boolean>()) {
+        liff?.login()
         return null
     }
     
-    return suspendCoroutine { continuation ->
-        liff.getProfile().then({ profile: Any ->
-            val p = profile.unsafeCast<dynamic>()
-            continuation.resume(User(
-                lineUid = p.userId.unsafeCast<String>(),
-                lineDisplayName = p.displayName.unsafeCast<String>(),
-                realName = p.displayName.unsafeCast<String>(),
-                initialHandicap = 36.0,
-                isSuperAdmin = false
-            ))
-        }, {
-            continuation.resume(null)
-        })
+    return try {
+        val profile = liff.getProfile().await().asDynamic()
+        User(
+            lineUid = profile.userId as String,
+            lineDisplayName = profile.displayName as String,
+            realName = profile.displayName as String,
+            initialHandicap = 36.0,
+            isSuperAdmin = false
+        )
+    } catch (e: Exception) {
+        null
     }
 }

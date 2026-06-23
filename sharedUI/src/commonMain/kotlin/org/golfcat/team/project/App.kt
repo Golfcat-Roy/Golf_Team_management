@@ -138,7 +138,15 @@ fun AppContent(
         outline = androidx.compose.ui.graphics.Color(0xFF1A1A1A).copy(alpha = 0.6f)
     )
 
-    MaterialTheme(colorScheme = golfCatColorScheme) {
+    val typography = Typography(
+        bodyLarge = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif),
+        bodyMedium = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif),
+        titleLarge = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif),
+        labelLarge = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif),
+        headlineMedium = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif)
+    )
+
+    MaterialTheme(colorScheme = golfCatColorScheme, typography = typography) {
         val user = currentUser
         
         if (!isSessionLoaded) {

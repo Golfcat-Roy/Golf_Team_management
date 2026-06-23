@@ -13,6 +13,10 @@ fun main() {
     fun launchApp() {
         val root = document.getElementById("app-root")
         if (root != null) {
+            // 清理節點
+            while (root.hasChildNodes()) {
+                root.removeChild(root.firstChild!!)
+            }
             ComposeViewport(root) {
                 App()
             }
@@ -24,10 +28,13 @@ fun main() {
         return
     }
 
-    // 只做初始化，不手動設定 User，讓 LoginScreen 的邏輯來跑
     liff.init(kotlin.js.json("liffId" to liffId)).then({
-        launchApp()
-    }, { 
+        if (!liff.isLoggedIn().unsafeCast<Boolean>()) {
+            liff.login()
+        } else {
+            launchApp()
+        }
+    }, {
         launchApp()
     })
 }
