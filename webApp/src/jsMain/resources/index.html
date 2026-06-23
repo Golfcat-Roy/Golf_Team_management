@@ -582,7 +582,11 @@
                                 <button onclick="showParticipants('${event.id}')" class="py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm">參賽名單</button>
                                 ${event.handicap_rule === 'New_New_Peoria' && isRegistered ? `<button onclick="showVotingDialog('${event.id}')" class="py-3 bg-emerald-100 text-emerald-800 rounded-xl font-black text-xs shadow-sm border border-emerald-200">🗳️ 隱藏洞投票</button>` : (isStarted ?
                                     `<button onclick="startScoring('${event.id}')" class="py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md">輸入成績</button>` :
-                                    `<button class="py-3 bg-gray-100 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed">等待開賽</button>`
+                                    (isAdmin() ? (event.handicap_rule === 'Match_Play' ?
+                                        `<div class="grid grid-cols-2 gap-1"><button onclick="renderGrouping('${event.id}', 'A')" class="py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-[10px]">A隊分組</button><button onclick="renderGrouping('${event.id}', 'B')" class="py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-[10px]">B隊分組</button></div>` :
+                                        `<button onclick="renderGrouping('${event.id}')" class="py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm">分組設定</button>`) :
+                                        `<button class="py-3 bg-gray-100 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed">等待開賽</button>`
+                                    )
                                 )}
                             </div>
                         ` : `
@@ -1246,93 +1250,164 @@
         }
     }
 
-    async function renderGrouping() {
-        const eventId = state.scoring.eventId || (state.activeTeam ? await getLatestEventId() : null);
-        if (!eventId) {
-            document.getElementById('page-container').innerHTML = `<div class='text-center py-20 text-gray-400'>目前無進行中的賽事分組</div>`;
-            return;
-        }
+    // --- 分組管理模組 (100% 移植自 GroupingScreen.kt) ---
+    let groupingState = {
+        eventId: null,
+        side: null,
+        participants: [],
+        draftGroups: [],
+        hasChanges: false
+    };
 
-        document.getElementById('header-title').innerText = "賽事分組";
-        showLoading("正在同步分組名單...");
+    async function renderGrouping(eventId, side = null) {
+        groupingState.eventId = eventId;
+        groupingState.side = side;
+
+        const title = side ? `${side}隊 - 分組設定` : "賽事分組設定";
+        document.getElementById('header-title').innerText = title;
+        showLoading("正在同步分組數據...");
 
         try {
-            // 1. 獲取賽事資訊
-            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).maybeSingle();
-
-            // 2. 獲取所有組別
-            const { data: groups, error: groupErr } = await supabaseClient
+            // 1. 獲取賽事與組別
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            const { data: groups } = await supabaseClient
                 .from('event_groups')
                 .select('*')
                 .eq('event_id', eventId)
+                .filter('side', side ? 'eq' : 'is', side || null)
                 .order('group_number', { ascending: true });
 
-            if (groupErr) throw groupErr;
+            // 2. 獲取所有參與者與目前組員
+            const { data: regs } = await supabaseClient.from('event_registrations').select('*, team_members(*, users(*))').eq('event_id', eventId);
+            const participants = regs.map(r => r.team_members);
 
-            // 3. 獲取所有組員資訊
-            const { data: members, error: memErr } = await supabaseClient
+            const { data: groupMembers } = await supabaseClient
                 .from('event_group_members')
-                .select('*, team_members(*, users(*))')
+                .select('*')
                 .in('group_id', groups.map(g => g.id));
 
-            if (memErr) throw memErr;
+            // 3. 初始化 Draft State
+            groupingState.participants = participants;
+            groupingState.draftGroups = groups.map(g => ({
+                group: g,
+                members: participants.filter(p => groupMembers.some(gm => gm.group_id === g.id && gm.team_member_id === p.id))
+            }));
+            groupingState.hasChanges = false;
 
+            refreshGroupingUI();
             hideLoading();
-            const container = document.getElementById('page-container');
-            container.innerHTML = `
-                <div class="space-y-6">
-                    <div class="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm">
-                        <h3 class="font-bold text-[#133B2B]">${event.title}</h3>
-                        <p class="text-[10px] text-gray-400 mt-1 uppercase tracking-wider">分組名單匯總</p>
-                    </div>
-                    <div id="group-list" class="space-y-4"></div>
-                </div>
-            `;
+        } catch (err) {
+            alert("分組載入失敗：" + err.message);
+            hideLoading();
+        }
+    }
 
-            const list = document.getElementById('group-list');
-            if (!groups || groups.length === 0) {
-                list.innerHTML = `<div class='text-center py-10 text-gray-300'>尚未建立分組</div>`;
-                return;
+    function refreshGroupingUI() {
+        // 更新 Header 右側為「儲存」按鈕
+        const headerRight = document.getElementById('header-right');
+        if (groupingState.hasChanges) {
+            headerRight.innerHTML = `<button onclick="saveGroupingChanges()" class="bg-amber-400 text-[#04432C] px-4 py-1.5 rounded-full font-black text-xs shadow-sm">儲存變更</button>`;
+        } else {
+            headerRight.innerHTML = `<button onclick="switchTab(0)" class="text-white opacity-60 text-xs font-bold">返回</button>`;
+        }
+
+        const container = document.getElementById('page-container');
+
+        const assignedIds = new Set(groupingState.draftGroups.flatMap(dg => dg.members.map(m => m.id)));
+        const unassigned = groupingState.participants.filter(p => !assignedIds.has(p.id));
+
+        let unassignedHtml = unassigned.map(p => `
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center mb-2">
+                <span class="font-bold text-gray-800">${p.users.real_name}</span>
+                <select onchange="assignToGroup('${p.id}', this.value)" class="bg-emerald-50 text-emerald-700 text-[10px] font-bold py-1 px-2 rounded-lg border-none focus:ring-0">
+                    <option value="">指派組別 ▼</option>
+                    ${groupingState.draftGroups.map(dg => `<option value="${dg.group.id}">第 ${dg.group.groupNumber} 組</option>`).join('')}
+                </select>
+            </div>
+        `).join('') || `<p class="text-center py-4 text-gray-300 italic text-xs">所有人員皆已進組</p>`;
+
+        let groupsHtml = groupingState.draftGroups.map(dg => `
+            <div class="bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden mb-4">
+                <div class="bg-gray-50 px-5 py-3 flex justify-between items-center border-b">
+                    <span class="font-black text-[#04432C]">第 ${dg.group.groupNumber} 組</span>
+                    <button onclick="clearGroup('${dg.group.id}')" class="text-[10px] text-rose-400 font-bold uppercase">清空</button>
+                </div>
+                <div class="p-4 flex flex-wrap gap-2">
+                    ${dg.members.map(m => `
+                        <div class="bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl flex items-center space-x-2">
+                            <span class="text-sm font-bold text-emerald-800">${m.users.real_name}</span>
+                            <span onclick="removeFromGroupDraft('${dg.group.id}', '${m.id}')" class="text-rose-400 font-bold cursor-pointer">✕</span>
+                        </div>
+                    `).join('') || '<p class="text-gray-300 text-xs italic">尚未指派成員</p>'}
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="fade-in">
+                <h4 class="text-[10px] text-gray-400 font-black uppercase mb-3 ml-1 tracking-widest">未分組成員 (Unassigned)</h4>
+                <div class="mb-8">${unassignedHtml}</div>
+
+                <h4 class="text-[10px] text-gray-400 font-black uppercase mb-3 ml-1 tracking-widest">已分組名單 (Assignments)</h4>
+                <div>${groupsHtml}</div>
+            </div>
+        `;
+    }
+
+    window.assignToGroup = (memberId, groupId) => {
+        if (!groupId) return;
+        const member = groupingState.participants.find(p => p.id === memberId);
+        groupingState.draftGroups = groupingState.draftGroups.map(dg => {
+            if (dg.group.id === groupId) {
+                return { ...dg, members: [...dg.members, member] };
+            }
+            return dg;
+        });
+        groupingState.hasChanges = true;
+        refreshGroupingUI();
+    };
+
+    window.removeFromGroupDraft = (groupId, memberId) => {
+        groupingState.draftGroups = groupingState.draftGroups.map(dg => {
+            if (dg.group.id === groupId) {
+                return { ...dg, members: dg.members.filter(m => m.id !== memberId) };
+            }
+            return dg;
+        });
+        groupingState.hasChanges = true;
+        refreshGroupingUI();
+    };
+
+    window.clearGroup = (groupId) => {
+        groupingState.draftGroups = groupingState.draftGroups.map(dg => {
+            if (dg.group.id === groupId) return { ...dg, members: [] };
+            return dg;
+        });
+        groupingState.hasChanges = true;
+        refreshGroupingUI();
+    };
+
+    async function saveGroupingChanges() {
+        showLoading("正在儲存分組...");
+        try {
+            const assignments = groupingState.draftGroups.flatMap(dg =>
+                dg.members.map(m => ({ group_id: dg.group.id, team_member_id: m.id }))
+            );
+
+            // 1. 刪除該 Side 的現有分組成員 (對齊 App 批次邏輯)
+            const groupIds = groupingState.draftGroups.map(dg => dg.group.id);
+            await supabaseClient.from('event_group_members').delete().in('group_id', groupIds);
+
+            // 2. 批次插入新分組
+            if (assignments.length > 0) {
+                const { error } = await supabaseClient.from('event_group_members').insert(assignments);
+                if (error) throw error;
             }
 
-            groups.forEach(group => {
-                const groupMembers = members.filter(m => m.group_id === group.id);
-                const card = document.createElement('div');
-                card.className = "bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100";
-
-                let membersHtml = groupMembers.map(m => `
-                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-[#133B2B] font-bold text-xs">
-                                ${m.team_members.users.real_name.charAt(0)}
-                            </div>
-                            <span class="font-bold text-gray-800">${m.team_members.users.real_name}</span>
-                        </div>
-                        <span class="text-[10px] text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-100">
-                            HC: ${m.team_members.current_team_handicap}
-                        </span>
-                    </div>
-                `).join('');
-
-                if (groupMembers.length === 0) {
-                    membersHtml = `<p class="text-center text-gray-300 text-xs py-4 italic">暫無成員</p>`;
-                }
-
-                card.innerHTML = `
-                    <div class="bg-emerald-50 px-5 py-3 border-b border-emerald-100 flex justify-between items-center">
-                        <span class="font-black text-[#133B2B]">第 ${group.group_number} 組</span>
-                        ${group.side ? `<span class="bg-[#133B2B] text-white text-[9px] px-2 py-0.5 rounded-full font-bold">Side ${group.side}</span>` : ''}
-                    </div>
-                    <div class="p-4 space-y-2">
-                        ${membersHtml}
-                    </div>
-                `;
-                list.appendChild(card);
-            });
-
+            alert("分組儲存成功！");
+            renderGrouping(groupingState.eventId, groupingState.side);
         } catch (err) {
-            console.error("Fetch grouping failed", err);
-            alert("載入分組失敗");
+            alert("儲存失敗：" + err.message);
             hideLoading();
         }
     }
