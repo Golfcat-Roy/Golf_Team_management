@@ -20,7 +20,6 @@
 
     <style>
         body { font-family: 'Noto Sans TC', sans-serif; }
-        /* 隱藏滾動條但保有功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -66,6 +65,7 @@
 
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let userProfile = null;
+    let globalMemberId = null; // 儲存最終對齊的球員 UUID
 
     async function initLiff() {
         try {
@@ -80,8 +80,10 @@
             } else {
                 userProfile = await liff.getProfile();
                 console.log("LINE 驗證成功:", userProfile.displayName);
-                document.getElementById('loading-status').innerText = "正在同步球賽行程...";
-                await fetchTournaments();
+                document.getElementById('loading-status').innerText = "正在解析球員識別碼...";
+
+                // 執行核心識別碼轉換，取得球員的真實 UUID
+                await prepareUserIdentifiers();
             }
         } catch (error) {
             console.error("LIFF 錯誤:", error);
@@ -89,20 +91,56 @@
         }
     }
 
+    // 核心密鑰轉換：將 LINE ID 轉換成資料庫實體 UUID
+    async function prepareUserIdentifiers() {
+        try {
+            // 1. 先用 LINE ID 查出 users 表的 uuid
+            const { data: userRow, error: userErr } = await supabaseClient
+                .from('users')
+                .select('id')
+                .eq('line_uid', userProfile.userId)
+                .maybeSingle();
+
+            if (userErr) throw userErr;
+            if (!userRow) {
+                document.getElementById('loading-status').innerText = "系統查無您的球員帳號，請聯繫管理員登錄。";
+                return;
+            }
+
+            // 2. 拿著 user_id 嘗試去 team_members 撈取 id
+            const { data: memberRow, error: memberErr } = await supabaseClient
+                .from('team_members')
+                .select('id')
+                .eq('user_id', userRow.id)
+                .maybeSingle();
+
+            // 3. 安全防護：如果隊員表有資料就用隊員ID，沒有就直接用用戶ID降級對齊
+            globalMemberId = memberRow ? memberRow.id : userRow.id;
+
+            // 順利取得識別碼後，開始同步賽事
+            document.getElementById('loading-status').innerText = "正在同步球賽行程...";
+            await fetchTournaments();
+
+        } catch (err) {
+            console.error("識別碼轉換失敗:", err);
+            document.getElementById('loading-status').innerText = "識別碼綁定失敗: " + err.message;
+        }
+    }
+
     async function fetchTournaments() {
         try {
-            // 1. 撈取所有球賽（events 表）
+            // 1. 撈取所有球賽
             const { data: events, error } = await supabaseClient
                 .from('events')
                 .select('*');
 
             if (error) throw error;
 
-            // 2. 撈取報名紀錄（已修正欄位名稱為 line_uid）
+            // 2. 撈取報名紀錄（精準修正為對比 team_member_id）
             const { data: myRegistrations, regError } = await supabaseClient
                 .from('event_registrations')
                 .select('event_id')
-                .eq('line_uid', userProfile.userId);
+                .eq('team_member_id', globalMemberId);
 
             if (regError) {
                 alert("讀取報名紀錄失敗: " + regError.message);
@@ -133,12 +171,10 @@
             const isRegistered = registeredEventIds.has(event.id);
             const card = document.createElement('div');
 
-            // 還原 Compose 外殼樣式：白底、圓角、細灰邊框
             card.className = "bg-white rounded-2xl border border-slate-300 overflow-hidden shadow-xs flex flex-col";
 
             let actionButtonsHtml = '';
             if (!isRegistered) {
-                // 未報名：寬版綠色按鈕
                 actionButtonsHtml = `
                     <div class="pt-1">
                         <button onclick="registerGame('${event.id}')" class="w-full bg-[#047857] hover:bg-emerald-800 text-white py-3 px-4 rounded-xl font-bold tracking-wide active:scale-[0.99] transition text-sm">
@@ -147,7 +183,6 @@
                     </div>
                 `;
             } else {
-                // 已報名：2x2 按鈕群組（精準對色）
                 actionButtonsHtml = `
                     <div class="space-y-2 pt-1">
                         <div class="grid grid-cols-2 gap-3">
@@ -170,7 +205,6 @@
                 `;
             }
 
-            // 組合灰色獨立 Header 與 Body，並將時間修正為 event.start_time
             card.innerHTML = `
                 <div class="bg-[#F3F4F6] px-4 py-3 border-b border-slate-200 flex justify-between items-center">
                     <span class="font-bold text-[#1F2937] text-sm md:text-base">${event.title || '例行賽'} - ${event.date || ''}</span>
@@ -190,13 +224,19 @@
         });
     }
 
-    // 按鈕動作：寫入 event_registrations 資料表
+    // 按鈕動作：寫入 event_registrations 資料表（補上 non-nullable status）
     async function registerGame(eventId) {
         try {
             if(!confirm("確定要登記報名這場球賽嗎？")) return;
             const { error } = await supabaseClient
                 .from('event_registrations')
-                .insert([{ event_id: eventId, line_uid: userProfile.userId, user_name: userProfile.displayName }]);
+                .insert([
+                    {
+                        event_id: eventId,
+                        team_member_id: globalMemberId,
+                        status: '已報名' // 填入非空值，完美解決 status 限制
+                    }
+                ]);
             if (error) throw error;
             alert("報名成功！");
             fetchTournaments();
@@ -211,7 +251,9 @@
             if(!confirm("確定要取消這場球賽的報名嗎？")) return;
             const { error } = await supabaseClient
                 .from('event_registrations')
-                .delete().eq('event_id', eventId).eq('line_uid', userProfile.userId);
+                .delete()
+                .eq('event_id', eventId)
+                .eq('team_member_id', globalMemberId);
             if (error) throw error;
             alert("已成功取消報名。");
             fetchTournaments();
