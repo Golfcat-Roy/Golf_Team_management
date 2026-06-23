@@ -266,10 +266,30 @@
         const team = state.myTeams.find(t => t.id === teamId);
         if (team) {
             state.activeTeam = team;
-            // 重新同步該球隊的角色 (這裡簡化處理，實際可能需要重新查詢)
+
+            // [修正：資料隔離邏輯] 切換球隊時，必須同步更新該球隊的專屬 Member ID 與 Role
+            // 這裡假設 state.dbUser 已經載入，我們從 team_members 的快取中找
+            // 正確做法是重新查詢，但為了效能我們先從同步過的 myTeams 快取對象中獲取
+            // 由於之前 syncUserData 已經拿到了所有 members，我們這裡直接重新解析
+            refreshMemberRole(teamId);
+
             document.getElementById('header-title').innerText = team.name;
             toggleTeamMenu();
             switchTab(state.currentTab); // 刷新當前頁面
+        }
+    }
+
+    async function refreshMemberRole(teamId) {
+        const { data: member } = await supabaseClient
+            .from('team_members')
+            .select('id, role')
+            .eq('user_id', state.dbUser.id)
+            .eq('team_id', teamId)
+            .maybeSingle();
+
+        if (member) {
+            state.myMemberId = member.id;
+            state.myRole = member.role;
         }
     }
 
@@ -294,6 +314,9 @@
 
         if (state.activeTeam) {
             document.getElementById('header-title').innerText = state.activeTeam.name;
+        } else {
+             // 若無球隊，強制跳轉到管理分頁加入球隊
+             if (index !== 3) { switchTab(3); return; }
         }
 
         switch(index) {
@@ -398,25 +421,19 @@
     }
 
     async function fetchTournaments() {
+        if (!state.activeTeam) return;
         try {
-            // 1. 撈取所有球賽
+            // 1. 撈取目前球隊的球賽
             const { data: events, error } = await supabaseClient
                 .from('events')
                 .select('*')
+                .eq('team_id', state.activeTeam.id)
                 .order('date', { ascending: false });
 
             if (error) throw error;
 
-            // 2. 撈取我的報名紀錄 (使用 dbUser.id 對齊)
-            // 這裡需要先獲取 team_member_id，為了簡化邏輯我們先假定 user_id 直接對應
-            // 正確做法是去查 team_members 表
-            const { data: myMember } = await supabaseClient
-                .from('team_members')
-                .select('id')
-                .eq('user_id', state.dbUser.id)
-                .maybeSingle();
-
-            const memberId = myMember ? myMember.id : null;
+            // 2. 獲取我在該球隊的 memberId
+            const memberId = state.myMemberId;
 
             const { data: myRegs } = await supabaseClient
                 .from('event_registrations')
@@ -972,7 +989,14 @@
     }
 
     async function getLatestEventId() {
-        const { data } = await supabaseClient.from('events').select('id').order('date', { ascending: false }).limit(1).maybeSingle();
+        if (!state.activeTeam) return null;
+        const { data } = await supabaseClient
+            .from('events')
+            .select('id')
+            .eq('team_id', state.activeTeam.id)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle();
         return data?.id;
     }
 
