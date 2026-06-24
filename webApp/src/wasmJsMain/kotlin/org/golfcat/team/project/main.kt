@@ -3,6 +3,7 @@ package org.golfcat.team.project
 // 💡 確保 Compose Web 的 Window 啟動器有被正確匯入
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.CanvasBasedWindow
+import org.golfcat.team.project.App
 
 // 💡 因為 App() 通常就定義在 org.golfcat.team.project 這個 package 底下，
 // 所以通常不需要額外 import，直接呼叫即可！

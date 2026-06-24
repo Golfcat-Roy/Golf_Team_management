@@ -21,11 +21,15 @@ kotlin {
     sourceSets {
         val wasmJsMain by getting {
             dependencies {
+                // 匯入你的 sharedUI 模組
                 implementation(projects.sharedUI)
-                implementation(libs.compose.runtime)
-                implementation(libs.compose.ui)
-                implementation(libs.compose.foundation)
-                implementation(libs.compose.material3)
+
+                // 💡 關鍵修正：這裡必須使用 compose. 開頭，不能用 libs.compose
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(compose.ui) // 👈 CanvasBasedWindow 就藏在這裡面！
+                implementation(compose.components.resources)
             }
         }
     }
