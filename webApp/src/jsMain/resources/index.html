@@ -130,10 +130,21 @@
 </div>
 
 <script>
-    // --- 啟動調試工具 ---
-    const vConsole = new VConsole();
+    // --- 診斷工具：直接在畫面上輸出進度 ---
+    function diag(msg) {
+        console.log(msg);
+        const el = document.querySelector('#loading-screen p');
+        if (el) el.innerText = msg;
+    }
 
-    // --- 配置與狀態 ---
+    // --- 啟動調試工具 ---
+    try {
+        window.vConsole = new VConsole();
+    } catch (e) {
+        console.warn("vConsole load failed, continuing...");
+    }
+
+    diag("🚀 系統啟動中...");
     const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -170,37 +181,29 @@
 
     // --- 初始化 ---
     async function initApp() {
-        console.log("🚀 App 啟動中...");
+        diag("📞 正在初始化 LIFF...");
         try {
-            console.log("📞 正在初始化 LIFF...");
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
 
             if (!liff.isLoggedIn()) {
-                console.log("🔑 未登入，導向 LINE 登入...");
+                diag("🔑 未登入，導向 LINE 登入...");
                 liff.login();
                 return;
             }
 
-            console.log("👤 取得 LINE Profile...");
+            diag("👤 取得 LINE Profile...");
             state.userProfile = await liff.getProfile();
-            console.log("✅ Profile 取得成功:", state.userProfile.displayName);
+            diag("✅ Profile 取得成功: " + state.userProfile.displayName);
 
             await syncUserData();
         } catch (err) {
-            console.error("❌ 初始化過程失敗:", err);
-            document.getElementById('loading-screen').innerHTML = `
-                <div class="p-6 text-center">
-                    <p class='text-red-500 font-bold'>初始化失敗</p>
-                    <p class='text-gray-400 text-xs mt-2'>${err.message}</p>
-                    <button onclick="location.reload()" class="mt-4 bg-[#04432C] text-white px-6 py-2 rounded-full text-sm">重試</button>
-                </div>
-            `;
+            diag("❌ 初始化失敗: " + err.message);
         }
     }
 
     // --- 資料同步 (對齊 App.kt 攔截邏輯) ---
     async function syncUserData() {
-        console.log("🔍 開始同步用戶資料, LINE ID:", state.userProfile.userId);
+        diag("🔍 開始同步用戶資料...");
         try {
             const { data: user, error } = await supabaseClient
                 .from('users')
@@ -209,15 +212,15 @@
                 .maybeSingle();
 
             if (error) {
-                console.error("❌ 讀取用戶表失敗:", error);
+                diag("❌ 讀取用戶表失敗: " + error.message);
                 throw error;
             }
 
-            console.log("✅ 用戶表查詢結果:", user);
+            diag("✅ 用戶表查詢成功: " + (user ? user.real_name : "無資料"));
 
             // 邏輯 1: 沒資料或名字是預設值 ➔ 強制導向設定頁面
             if (!user || user.real_name === "User") {
-                console.log("⚠️ 資料不全，引導至設定頁面");
+                diag("⚠️ 資料不全，引導至設定頁面");
                 renderProfileSetup();
                 return;
             }
@@ -225,14 +228,14 @@
             state.dbUser = user;
 
             // 獲取所屬球隊與角色
-            console.log("🔍 正在獲取球隊成員資料...");
+            diag("🔍 正在獲取球隊成員資料...");
             const { data: members, error: mError } = await supabaseClient
                 .from('team_members')
                 .select('*, teams(*)')
                 .eq('user_id', user.id);
 
             if (mError) {
-                console.error("❌ 讀取成員表失敗:", mError);
+                diag("❌ 讀取成員表失敗: " + mError.message);
                 throw mError;
             }
 
