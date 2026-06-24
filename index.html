@@ -106,6 +106,15 @@
             groupId: null,
             playerScores: {},
             eventPars: Array(18).fill(4)
+        },
+
+        // --- 步驟 12: 分組草稿狀態 (Grouping Draft State) ---
+        grouping: {
+            eventId: null,
+            side: null,
+            participants: [], // MemberWithUser
+            draftGroups: [], // { group: EventGroup, members: MemberWithUser[] }
+            hasChanges: false
         }
     };
 
@@ -120,7 +129,32 @@
         if (el) el.innerText = msg;
     }
 
-    // --- 系統啟動 (100% 對齊 App.kt 初始化) ---
+    // --- 步驟 6: 錯誤碼轉譯引擎 (100% 移植自 App 異常處理) ---
+    function translateError(err) {
+        if (!err) return "發生未知錯誤";
+
+        const code = err.code || err.status;
+        const msg = err.message || "";
+
+        // 對齊 App 版 TeamRepository.kt 與 AuthManager.kt 的攔截邏輯
+        switch (code) {
+            case '23505': return "此球員已經報名過這場比賽囉！";
+            case '406':
+                liff.logout();
+                return "登入權限已過期，系統已自動為您重登。";
+            case 'PGRST116': return "找不到相關紀錄。";
+            case '42501': return "您的權限不足，無法執行此操作。";
+            case 'ECONNREFUSED': return "網路連線失敗，請檢查 5G/Wi-Fi 狀態。";
+        }
+
+        // 關鍵字匹配 (模仿 Kotlin contain 判斷)
+        if (msg.includes("JWT")) return "身分驗證失效，請重新進入。";
+        if (msg.includes("memberLimit")) return "球隊人數已達上限，無法新增成員。";
+
+        return msg || "連線不穩定，請稍後再試。";
+    }
+
+    // 更新現有函式的捕獲邏輯
     async function initApp() {
         diag("啟動 LIFF...");
         try {
@@ -129,10 +163,12 @@
 
             const profile = await liff.getProfile();
             await syncUserLogic(profile);
-        } catch (err) { diag(`初始化失敗: ${err.message}`); }
+        } catch (err) {
+            const friendlyMsg = translateError(err);
+            diag(`❌ 初始化失敗: ${friendlyMsg}`);
+        }
     }
 
-    // --- 用戶同步邏輯 (100% 移植 AuthManager.kt & App.kt 攔截器) ---
     async function syncUserLogic(liffProfile) {
         diag("同步雲端用戶...");
         try {
@@ -140,12 +176,7 @@
                 .from('users').select('*').eq('line_uid', liffProfile.userId).maybeSingle();
 
             if (error) throw error;
-
-            // [移植閘門邏輯] 若為新用戶或名字未設，強導向 ProfileSetup
-            if (!user || user.real_name === "User") {
-                renderProfileSetup(liffProfile);
-                return;
-            }
+            if (!user || user.real_name === "User") { renderProfileSetup(liffProfile); return; }
 
             appState.currentUser = user;
 
@@ -154,20 +185,23 @@
                 .from('team_members').select('*, teams(*)').eq('user_id', user.id);
 
             if (mError) throw mError;
-
-            // [移植閘門邏輯] 若無任何球隊，強導向 ProfileSetup (加入球隊頁面)
-            if (!members || members.length === 0) {
-                renderProfileSetup(liffProfile);
-                return;
-            }
+            if (!members || members.length === 0) { renderProfileSetup(liffProfile); return; }
 
             appState.myTeams = members.map(m => m.teams).filter(t => t !== null);
             appState.activeTeam = appState.myTeams[0];
+
+            // 載入目前球隊的角色
+            const activeMember = members.find(m => m.team_id === appState.activeTeam.id);
+            appState.currentUser.role = activeMember?.role || 'member';
+            appState.currentUser.memberId = activeMember?.id;
+
             appState.isSessionLoaded = true;
 
             hideLoading(liffProfile.pictureUrl);
             switchTab(0);
-        } catch (err) { diag(`同步失敗: ${err.message}`); }
+        } catch (err) {
+            diag(`❌ 同步失敗: ${translateError(err)}`);
+        }
     }
 
     // --- 核心導覽閘門 (步驟 1 核心) ---
@@ -236,12 +270,554 @@
         }
     }
 
-    // 暫存佔位函式 (待後續步驟補完)
-    function renderEvents() { diag("載入賽事..."); }
+    // --- 步驟 4: 賽事列表模組 (100% 移植排序邏輯) ---
+    async function renderEvents() {
+        if (!appState.activeTeam) return;
+
+        diag("載入球隊賽事...");
+        const container = document.getElementById('page-container');
+        container.innerHTML = `
+            <div id="event-list-loading" class="py-10 text-center text-gray-400 text-sm">正在同步賽事...</div>
+            <div id="event-items-container" class="space-y-4"></div>
+        `;
+
+        try {
+            // 1. 抓取該球隊的所有賽事
+            const { data: events, error } = await supabaseClient
+                .from('events')
+                .select('*')
+                .eq('team_id', appState.activeTeam.id)
+                .eq('is_archived_in_list', false);
+
+            if (error) throw error;
+
+            // 2. [核心轉譯] 兩階段排序算法
+            const sortedEvents = events.sort((a, b) => {
+                const isClosedA = a.registration_status === 'closed';
+                const isClosedB = b.registration_status === 'closed';
+
+                if (isClosedA !== isClosedB) {
+                    return isClosedA ? -1 : 1; // 已結賽排在前面
+                } else {
+                    if (isClosedA) {
+                        return b.date.localeCompare(a.date); // 結賽按日期倒序 (新->舊)
+                    } else {
+                        return a.date.localeCompare(b.date); // 報名中按日期正序 (最近的在前面)
+                    }
+                }
+            });
+
+            // 3. 獲取使用者報名狀態 (對其 App 版 isUserRegistered)
+            const { data: myRegs } = await supabaseClient
+                .from('event_registrations')
+                .select('event_id')
+                .eq('team_member_id', appState.currentUser.id); // 這裡需注意 appState.currentUser.id 是否為 memberId
+
+            // 注意：這裡假設 currentUser 已載入 memberId，若無則預設 false
+            const regSet = new Set(myRegs?.map(r => r.event_id) || []);
+
+            const listContainer = document.getElementById('event-items-container');
+            document.getElementById('event-list-loading').classList.add('hidden');
+
+            if (sortedEvents.length === 0) {
+                listContainer.innerHTML = `<div class="py-20 text-center text-gray-400 italic">目前沒有排定的賽事喔！</div>`;
+                return;
+            }
+
+            sortedEvents.forEach((event, index) => {
+                const isRegistered = regSet.has(event.id);
+                const isClosed = event.registration_status === 'closed';
+                const isStarted = event.registration_status === 'started';
+
+                const card = document.createElement('div');
+                // 對其 App 版 Card 質感：結賽變灰，最近賽事帶深綠邊框
+                const isNearest = !isClosed && index === sortedEvents.findIndex(e => e.registration_status !== 'closed');
+
+                card.className = `bg-white rounded-3xl p-5 shadow-sm border-2 transition-all ${isClosed ? 'opacity-60 bg-gray-50 border-transparent' : (isNearest ? 'border-[#133B2B] shadow-md' : 'border-gray-100')}`;
+
+                const ruleName = {
+                    'Team_Handicap': '球隊差點',
+                    'New_New_Peoria': '新新貝利亞',
+                    'Match_Play': '分組對抗'
+                }[event.handicap_rule] || event.handicap_rule;
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-black text-lg text-[#133B2B] leading-tight">${event.title} - ${event.date.replace(/-/g, '.')}</h3>
+                        <span class="text-[9px] font-black px-2 py-1 rounded-lg ${isClosed ? 'bg-gray-200 text-gray-500' : 'bg-emerald-100 text-emerald-700'}">
+                            ${isClosed ? '已結賽' : (isStarted ? '進行中' : (isRegistered ? '已報名' : '報名中'))}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-5 bg-gray-50 p-3 rounded-2xl border border-gray-100/50">
+                        <div>地點: <span class="font-bold text-gray-900">${event.location || '未指定'}</span></div>
+                        <div>時間: <span class="font-bold text-gray-900">${event.start_time || '未指定'}</span></div>
+                        <div>賽制: <span class="font-bold text-gray-900">${ruleName}</span></div>
+                        <div>組數: <span class="font-bold text-gray-900">${event.group_count || 0} 組</span></div>
+                    </div>
+
+                    <div class="flex flex-col space-y-2">
+                        ${!isClosed ? `
+                            ${isRegistered
+                                ? `<button class="py-3 bg-white border border-rose-200 text-rose-500 rounded-2xl font-bold text-sm btn-active">取消報名</button>`
+                                : `<button class="py-3 bg-[#133B2B] text-white rounded-2xl font-bold text-sm btn-active shadow-lg">我要報名</button>`
+                            }
+                            ${isStarted ? `<button class="py-3 bg-emerald-600 text-white rounded-2xl font-bold text-sm btn-active">輸入成績</button>` : ''}
+
+                            ${['admin', 'president', 'vice_president'].includes(appState.currentUser.role) ? `
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <button onclick="renderGrouping('${event.id}')" class="py-2 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-[11px] border border-emerald-100 btn-active">分組設定</button>
+                                    <button onclick="toggleEventStatus('${event.id}', '${event.registration_status}')" class="py-2 ${isStarted ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'} rounded-xl font-bold text-[11px] btn-active">
+                                        ${isStarted ? '結束球賽' : '開始球賽'}
+                                    </button>
+                                </div>
+                            ` : ''}
+                        ` : `
+                            <button class="py-3 bg-gray-800 text-white rounded-2xl font-bold text-sm btn-active">查看最終成績 🏆</button>
+                        `}
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        } catch (err) { diag(`載入失敗: ${err.message}`); }
+    }
+    // --- 步驟 7 & 8: 計分模組 (100% 移植 ScoringScreen.kt 邏輯) ---
+    async function startScoring(eventId) {
+        if (!appState.currentUser) return;
+
+        diag("同步雲端計分板...");
+        try {
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            appState.scoring.eventId = eventId;
+            appState.scoring.eventPars = event.pars || Array(18).fill(4);
+            appState.scoring.isMatchPlay = (event.handicap_rule === 'Match_Play');
+
+            const { data: member } = await supabaseClient.from('team_members')
+                .select('id').eq('user_id', appState.currentUser.id).eq('team_id', event.team_id).single();
+
+            const { data: groupMember } = await supabaseClient.from('event_group_members')
+                .select('group_id').eq('team_member_id', member.id).maybeSingle();
+
+            if (!groupMember) {
+                alert("您尚未被分配到組別，無法進行計分。請聯絡管理員完成分組。");
+                return;
+            }
+            appState.scoring.groupId = groupMember.group_id;
+
+            const { data: groupData } = await supabaseClient.from('event_group_members')
+                .select('team_members(*, users(*))').eq('group_id', appState.scoring.groupId);
+
+            const players = groupData.map(d => d.team_members);
+            appState.scoring.players = players;
+
+            const { data: scores } = await supabaseClient.from('scores').select('*').eq('event_id', eventId);
+            appState.scoring.playerScores = {};
+            players.forEach(p => {
+                const existing = scores.find(s => s.team_member_id === p.id);
+                appState.scoring.playerScores[p.id] = existing ? [...existing.hole_scores] : Array(18).fill(0);
+            });
+
+            // --- 步驟 7: 智慧跳洞邏輯 (Auto-navigation) ---
+            let targetHole = 1;
+            for (let h = 1; h <= 18; h++) {
+                const isHoleEmpty = appState.scoring.isMatchPlay
+                    ? players.every(p => appState.scoring.playerScores[p.id][h - 1] === 0)
+                    : players.some(p => appState.scoring.playerScores[p.id][h - 1] === 0);
+                if (isHoleEmpty) { targetHole = h; break; }
+            }
+            appState.scoring.currentHole = targetHole;
+
+            renderScoringUI();
+        } catch (err) { diag(`計分啟動失敗: ${translateError(err)}`); }
+    }
+
+    // --- 步驟 9: 即時成就點數計算 (100% 移植 HandicapCalculator 邏輯) ---
+    function calculateBonus(score, par) {
+        if (score <= 0) return 0;
+        const diff = score - par;
+        if (score === 1) return 1.0;
+        if (diff <= -2) return 1.0;
+        if (diff === -1) return 0.5;
+        return 0;
+    }
+
+    function renderScoringUI() {
+        const h = appState.scoring.currentHole;
+        const par = appState.scoring.eventPars[h - 1];
+        document.getElementById('header-title').innerText = `第 ${h} 洞 (Par ${par})`;
+        document.getElementById('bottom-nav').classList.add('hidden');
+
+        const container = document.getElementById('page-container');
+
+        // [步驟 9 新增] 計算本組目前該洞總成就分
+        let totalBonus = 0;
+        Object.keys(appState.scoring.playerScores).forEach(pId => {
+            totalBonus += calculateBonus(appState.scoring.playerScores[pId][h - 1], par);
+        });
+
+        container.innerHTML = `
+            <div class="bg-[#133B2B] text-white p-4 rounded-3xl shadow-inner mb-6 border border-emerald-800">
+                <div class="flex justify-between items-center text-[10px] opacity-60 uppercase tracking-widest mb-1">
+                    <span>Live Match Bonus</span>
+                    <span>Hole ${h}</span>
+                </div>
+                <div class="flex items-end space-x-1">
+                    <span class="text-3xl font-black text-amber-400">${totalBonus > 0 ? '+' + totalBonus : '0.0'}</span>
+                    <span class="text-[10px] mb-1.5 opacity-70">pts Achievement</span>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="changeHole(-1)" class="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center font-bold btn-active">◀</button>
+                <div class="flex space-x-2">
+                    <button onclick="saveScores()" class="bg-[#133B2B] text-white px-6 py-2 rounded-xl font-bold shadow-lg btn-active">儲存</button>
+                    <button onclick="exitScoring()" class="bg-gray-100 text-gray-500 px-4 py-2 rounded-xl font-bold btn-active">退出</button>
+                </div>
+                <button onclick="changeHole(1)" class="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center font-bold btn-active">▶</button>
+            </div>
+            <div id="player-list" class="space-y-4"></div>
+        `;
+
+        const list = document.getElementById('player-list');
+        appState.scoring.players.forEach((p, index) => {
+            const isLocked = appState.scoring.isMatchPlay && index > 0;
+            const currentVal = appState.scoring.playerScores[p.id][h - 1];
+            const totalScore = appState.scoring.playerScores[p.id].reduce((a, b) => a + b, 0);
+
+            const row = document.createElement('div');
+            row.className = `bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between ${isLocked ? 'opacity-50' : ''}`;
+            row.innerHTML = `
+                <div>
+                    <h4 class="font-black text-gray-900">${p.users.real_name}</h4>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase">Total: ${totalScore} ${isLocked ? ' | 隊友代表計分' : ''}</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button ${isLocked ? 'disabled' : `onclick="updateScore('${p.id}', -1)"`} class="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-xl font-light text-gray-400 border border-gray-100">-</button>
+                    <div class="w-12 h-12 flex items-center justify-center font-black text-2xl text-[#133B2B]">${currentVal || '-'}</div>
+                    <button ${isLocked ? 'disabled' : `onclick="updateScore('${p.id}', 1)"`} class="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-xl font-light text-gray-400 border border-gray-100">+</button>
+                </div>
+            `;
+            list.appendChild(row);
+        });
+    }
+
+    window.updateScore = (pId, delta) => {
+        if (window.navigator.vibrate) window.navigator.vibrate(5);
+        let val = appState.scoring.playerScores[pId][appState.scoring.currentHole - 1];
+        if (val === 0) val = appState.scoring.eventPars[appState.scoring.currentHole - 1];
+        val += delta;
+        if (val < 1) val = 1;
+        appState.scoring.playerScores[pId][appState.scoring.currentHole - 1] = val;
+        renderScoringUI();
+    };
+
+    window.changeHole = (delta) => {
+        let h = appState.scoring.currentHole + delta;
+        if (h < 1) h = 18; if (h > 18) h = 1;
+        appState.scoring.currentHole = h;
+        renderScoringUI();
+    };
+
+    async function saveScores() {
+        diag("上傳中...");
+        try {
+            const updates = appState.scoring.players.map(p => ({
+                event_id: appState.scoring.eventId,
+                team_member_id: p.id,
+                hole_scores: appState.scoring.playerScores[p.id],
+                gross_score: appState.scoring.playerScores[p.id].reduce((a, b) => a + b, 0)
+            }));
+            const { error } = await supabaseClient.from('scores').upsert(updates, { onConflict: 'event_id,team_member_id' });
+            if (error) throw error;
+            alert("成績已同步");
+            renderScoringUI();
+        } catch (err) { alert(`儲存失敗: ${translateError(err)}`); }
+    }
+
+    function exitScoring() { document.getElementById('bottom-nav').classList.remove('hidden'); switchTab(0); }
+
     function renderLeaderboard() { diag("載入排行..."); }
     function renderHistory() { diag("載入歷史..."); }
     function renderTeams() { diag("球隊管理..."); }
-    function renderProfileSetup(profile) { hideLoading(profile.pictureUrl); document.getElementById('page-container').innerHTML = "<div class='p-10 text-center'>請完成初次設定</div>"; }
+
+    // --- 步驟 10: 賽事狀態機控制 (100% 移植 TeamRepository.startEvent 檢查) ---
+    async function toggleEventStatus(eventId, currentStatus) {
+        if (currentStatus === 'open') {
+            diag("執行開賽前檢查...");
+            try {
+                // 1. 抓取報名人數
+                const { count: regCount } = await supabaseClient
+                    .from('event_registrations').select('*', { count: 'exact', head: true }).eq('event_id', eventId);
+
+                // 2. 抓取分組 ID 並統計成員數
+                const { data: groups } = await supabaseClient.from('event_groups').select('id').eq('event_id', eventId);
+                const groupIds = groups?.map(g => g.id) || [];
+
+                let assignedCount = 0;
+                if (groupIds.length > 0) {
+                    const { count } = await supabaseClient
+                        .from('event_group_members').select('*', { count: 'exact', head: true }).in('group_id', groupIds);
+                    assignedCount = count;
+                }
+
+                if (regCount > assignedCount) {
+                    alert(`❌ 無法開始球賽：尚有 ${regCount - assignedCount} 位球員未完成分組。請先完成分組設定後再開賽。`);
+                    return;
+                }
+            } catch (err) { alert("檢查失敗: " + err.message); return; }
+        }
+
+        const nextStatus = currentStatus === 'started' ? 'closed' : 'started';
+        const msg = currentStatus === 'started' ? "確定要結束球賽並封存成績嗎？" : "確定要開始球賽嗎？開始後球員將可輸入成績。";
+        if (!confirm(msg)) return;
+
+        diag("同步雲端狀態...");
+        try {
+            const { error } = await supabaseClient.from('events').update({ registration_status: nextStatus }).eq('id', eventId);
+            if (error) throw error;
+            renderEvents();
+        } catch (err) { alert("更新失敗: " + translateError(err)); }
+    }
+
+    // --- 步驟 11: 賽事複製深拷貝 (100% 移植 CreateEventScreen 邏輯) ---
+    async function onDuplicateEvent(eventId) {
+        if (!confirm("確定要複製此賽事的設定（地點、Par、規則）嗎？")) return;
+        diag("抓取樣板賽事...");
+        try {
+            const { data: source } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            const { data: team } = await supabaseClient.from('teams').select('id').eq('id', source.team_id).single();
+
+            const duplicateData = {
+                team_id: team.id,
+                title: `${source.location} 複製賽`,
+                location: source.location,
+                date: new Date().toISOString().split('T')[0], // 預設今天
+                start_time: source.start_time,
+                handicap_rule: source.handicap_rule,
+                pars: source.pars,
+                registration_status: 'open'
+            };
+
+            const { error } = await supabaseClient.from('events').insert([duplicateData]);
+            if (error) throw error;
+            alert("賽事複製成功！已自動建立一場新的報名。");
+            renderEvents();
+        } catch (err) { alert("複製失敗: " + translateError(err)); }
+    }
+
+    // --- 步驟 12: 分組管理模組 (100% 移植 GroupingScreen.kt 邏輯) ---
+    async function renderGrouping(eventId, side = null) {
+        diag("載入分組草稿...");
+        const container = document.getElementById('page-container');
+        document.getElementById('header-title').innerText = side ? `${side}隊 - 分組設定` : "分組設定";
+
+        try {
+            // 1. 抓取資料
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            const { data: participants } = await supabaseClient.from('event_registrations')
+                .select('*, team_members(*, users(*))').eq('event_id', eventId);
+
+            const { data: groups } = await supabaseClient.from('event_groups')
+                .select('*').eq('event_id', eventId).order('group_number', { ascending: true });
+
+            const groupIds = groups.map(g => g.id);
+            const { data: groupMembers } = await supabaseClient.from('event_group_members')
+                .select('*').in('group_id', groupIds);
+
+            // 2. 初始化草稿狀態
+            appState.grouping.eventId = eventId;
+            appState.grouping.side = side;
+            appState.grouping.participants = participants.map(p => p.team_members);
+            appState.grouping.draftGroups = groups.map(g => ({
+                group: g,
+                members: appState.grouping.participants.filter(p => groupMembers.some(gm => gm.group_id === g.id && gm.team_member_id === p.id))
+            }));
+            appState.grouping.hasChanges = false;
+
+            refreshGroupingUI();
+        } catch (err) { alert("分組載入失敗: " + err.message); }
+    }
+
+    function refreshGroupingUI() {
+        const container = document.getElementById('page-container');
+        const assignedIds = new Set(appState.grouping.draftGroups.flatMap(dg => dg.members.map(m => m.id)));
+        const unassigned = appState.grouping.participants.filter(p => !assignedIds.has(p.id));
+
+        container.innerHTML = `
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="renderEvents()" class="bg-gray-100 px-4 py-2 rounded-xl text-gray-500 font-bold">返回</button>
+                <button id="save-group-btn" onclick="saveGroupingChanges()" class="px-6 py-2 rounded-xl font-bold shadow-lg ${appState.grouping.hasChanges ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-400'}" ${appState.grouping.hasChanges ? '' : 'disabled'}>儲存變更</button>
+            </div>
+
+            <h4 class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-3">未分組成員</h4>
+            <div class="space-y-2 mb-8">
+                ${unassigned.map(p => `
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                        <span class="font-bold">${p.users.real_name}</span>
+                        <select onchange="assignToGroup('${p.id}', this.value)" class="text-xs border-none bg-gray-50 rounded-lg p-2 focus:ring-0">
+                            <option value="">指派組別 ▼</option>
+                            ${appState.grouping.draftGroups.map(dg => `<option value="${dg.group.id}">第 ${dg.group.groupNumber} 組</option>`).join('')}
+                        </select>
+                    </div>
+                `).join('') || '<p class="text-gray-300 text-xs text-center py-4">全員已分組</p>'}
+            </div>
+
+            <h4 class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-3">正式分組</h4>
+            <div class="space-y-4">
+                ${appState.grouping.draftGroups.map(dg => `
+                    <div class="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+                        <div class="bg-gray-50 px-5 py-3 border-b border-gray-100 flex justify-between items-center">
+                            <span class="font-black text-[#133B2B]">第 ${dg.group.groupNumber} 組</span>
+                            <span class="text-[10px] text-gray-300 uppercase">${dg.members.length} Players</span>
+                        </div>
+                        <div class="p-4 flex flex-wrap gap-2">
+                            ${dg.members.map(m => `
+                                <div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl text-sm font-bold flex items-center space-x-2">
+                                    <span>${m.users.real_name}</span>
+                                    <span onclick="removeFromGroupDraft('${dg.group.id}', '${m.id}')" class="text-rose-400 cursor-pointer">✕</span>
+                                </div>
+                            `).join('') || '<span class="text-gray-300 text-xs italic">尚無組員</span>'}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    window.assignToGroup = (memberId, groupId) => {
+        if (!groupId) return;
+        const member = appState.grouping.participants.find(p => p.id === memberId);
+        appState.grouping.draftGroups = appState.grouping.draftGroups.map(dg => {
+            if (dg.group.id === groupId) return { ...dg, members: [...dg.members, member] };
+            return dg;
+        });
+        appState.grouping.hasChanges = true;
+        refreshGroupingUI();
+    };
+
+    window.removeFromGroupDraft = (groupId, memberId) => {
+        appState.grouping.draftGroups = appState.grouping.draftGroups.map(dg => {
+            if (dg.group.id === groupId) return { ...dg, members: dg.members.filter(m => m.id !== memberId) };
+            return dg;
+        });
+        appState.grouping.hasChanges = true;
+        refreshGroupingUI();
+    };
+
+    async function saveGroupingChanges() {
+        diag("批次更新雲端...");
+        try {
+            const assignments = appState.grouping.draftGroups.flatMap(dg =>
+                dg.members.map(m => ({ group_id: dg.group.id, team_member_id: m.id }))
+            );
+
+            // 1. 刪除舊分組成員 (對齊 App 批次更新邏輯)
+            const groupIds = appState.grouping.draftGroups.map(dg => dg.group.id);
+            await supabaseClient.from('event_group_members').delete().in('group_id', groupIds);
+
+            // 2. 插入新成員
+            if (assignments.length > 0) {
+                const { error } = await supabaseClient.from('event_group_members').insert(assignments);
+                if (error) throw error;
+            }
+
+            alert("分組儲存成功");
+            appState.grouping.hasChanges = false;
+            renderEvents();
+        } catch (err) { alert("儲存失敗: " + err.message); }
+    }
+    // --- 步驟 5: 來賓報名模組 (100% 移植 App 邏輯) ---
+    function showGuestDialog(eventId) {
+        showModal(`
+            <div class="p-6 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-black text-xl text-[#133B2B]">來賓報名</h3>
+                    <button onclick="closeModal()" class="text-gray-400">✕</button>
+                </div>
+                <p class="text-xs text-gray-500 leading-relaxed">幫沒有使用系統的朋友卡位。系統將為其建立虛擬帳號並掛在您的名下。</p>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">來賓真實姓名</label>
+                    <input type="text" id="guest-name" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]" placeholder="輸入姓名">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">初始差點 (預設 36)</label>
+                    <input type="number" id="guest-hc" value="36" class="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-[#133B2B]">
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="executeGuestRegistration('${eventId}')" class="w-full py-4 bg-[#FB8C00] text-white rounded-2xl font-bold shadow-lg btn-active">確認報名來賓</button>
+                </div>
+            </div>
+        `);
+    }
+
+    async function executeGuestRegistration(eventId) {
+        const name = document.getElementById('guest-name').value;
+        const hc = parseFloat(document.getElementById('guest-hc').value) || 36;
+        if (!name) return alert("請輸入來賓姓名");
+
+        diag("處理來賓帳號中...");
+        try {
+            // 1. 查找該球隊是否已有同名來賓 (避免重複建立 User)
+            const { data: existingGuests } = await supabaseClient
+                .from('team_members')
+                .select('*, users!inner(*)')
+                .eq('team_id', appState.activeTeam.id)
+                .eq('role', 'guest')
+                .eq('users.real_name', name);
+
+            let memberId;
+            if (existingGuests && existingGuests.length > 0) {
+                memberId = existingGuests[0].id;
+            } else {
+                // 2. 建立新虛擬 User
+                const { data: newUser, error: uErr } = await supabaseClient.from('users').insert({
+                    line_uid: `GUEST_${Date.now()}`,
+                    real_name: name,
+                    initial_handicap: hc
+                }).select().single();
+                if (uErr) throw uErr;
+
+                // 3. 建立 TeamMember 關聯
+                const { data: newMember, error: mErr } = await supabaseClient.from('team_members').insert({
+                    team_id: appState.activeTeam.id,
+                    user_id: newUser.id,
+                    role: 'guest',
+                    current_team_handicap: hc,
+                    sponsor_member_id: appState.currentUser.id // 這裡暫用 userId
+                }).select().single();
+                if (mErr) throw mErr;
+                memberId = newMember.id;
+            }
+
+            // 4. 執行賽事報名
+            const { error: rErr } = await supabaseClient.from('event_registrations').insert({
+                event_id: eventId,
+                team_member_id: memberId
+            });
+
+            if (rErr) {
+                if (rErr.code === '23505') throw new Error("此人已經報名過這場比賽囉！");
+                throw rErr;
+            }
+
+            alert(`成功幫 ${name} 完成報名！`);
+            closeModal();
+            renderEvents();
+        } catch (err) {
+            alert("來賓報名失敗: " + err.message);
+            diag("錯誤: " + err.message);
+        }
+    }
+
+    // --- 全域 Modal 控制 ---
+    function showModal(content) {
+        const m = document.getElementById('global-modal');
+        document.getElementById('modal-body').innerHTML = content;
+        m.style.display = 'flex';
+    }
+    function closeModal() { document.getElementById('global-modal').style.display = 'none'; }
 
     window.addEventListener('load', initApp);
 </script>
