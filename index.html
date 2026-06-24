@@ -130,6 +130,9 @@
 </div>
 
 <script>
+    // --- 啟動調試工具 ---
+    const vConsole = new VConsole();
+
     // --- 配置與狀態 ---
     const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
@@ -167,17 +170,31 @@
 
     // --- 初始化 ---
     async function initApp() {
+        console.log("🚀 App 啟動中...");
         try {
+            console.log("📞 正在初始化 LIFF...");
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
+
             if (!liff.isLoggedIn()) {
+                console.log("🔑 未登入，導向 LINE 登入...");
                 liff.login();
                 return;
             }
+
+            console.log("👤 取得 LINE Profile...");
             state.userProfile = await liff.getProfile();
+            console.log("✅ Profile 取得成功:", state.userProfile.displayName);
+
             await syncUserData();
         } catch (err) {
-            console.error("Init failed", err);
-            document.getElementById('loading-screen').innerHTML = `<p class='text-red-500'>連線失敗: ${err.message}</p>`;
+            console.error("❌ 初始化過程失敗:", err);
+            document.getElementById('loading-screen').innerHTML = `
+                <div class="p-6 text-center">
+                    <p class='text-red-500 font-bold'>初始化失敗</p>
+                    <p class='text-gray-400 text-xs mt-2'>${err.message}</p>
+                    <button onclick="location.reload()" class="mt-4 bg-[#04432C] text-white px-6 py-2 rounded-full text-sm">重試</button>
+                </div>
+            `;
         }
     }
 
