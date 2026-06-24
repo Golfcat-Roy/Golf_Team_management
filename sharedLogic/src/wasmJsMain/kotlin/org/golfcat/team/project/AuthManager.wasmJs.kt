@@ -1,4 +1,7 @@
-package org.golfcat.team.project
+// 💡 把這行加在檔案的「第一行」
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
+Package org.golfcat.team.project
 
 import org.golfcat.team.project.models.User
 import kotlinx.coroutines.await

@@ -1,3 +1,5 @@
+// 💡 把這行加在檔案的「第一行」
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
 package org.golfcat.team.project
 
 import kotlinx.coroutines.await
