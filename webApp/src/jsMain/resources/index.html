@@ -183,41 +183,69 @@
 
     // --- 資料同步 (對齊 App.kt 攔截邏輯) ---
     async function syncUserData() {
-        const { data: user, error } = await supabaseClient
-            .from('users')
-            .select('*')
-            .eq('line_uid', state.userProfile.userId)
-            .maybeSingle();
+        console.log("🔍 開始同步用戶資料, LINE ID:", state.userProfile.userId);
+        try {
+            const { data: user, error } = await supabaseClient
+                .from('users')
+                .select('*')
+                .eq('line_uid', state.userProfile.userId)
+                .maybeSingle();
 
-        if (error) throw error;
+            if (error) {
+                console.error("❌ 讀取用戶表失敗:", error);
+                throw error;
+            }
 
-        // 邏輯 1: 沒資料或名字是預設值 ➔ 強制導向設定頁面
-        if (!user || user.real_name === "User") {
-            renderProfileSetup();
-            return;
+            console.log("✅ 用戶表查詢結果:", user);
+
+            // 邏輯 1: 沒資料或名字是預設值 ➔ 強制導向設定頁面
+            if (!user || user.real_name === "User") {
+                console.log("⚠️ 資料不全，引導至設定頁面");
+                renderProfileSetup();
+                return;
+            }
+
+            state.dbUser = user;
+
+            // 獲取所屬球隊與角色
+            console.log("🔍 正在獲取球隊成員資料...");
+            const { data: members, error: mError } = await supabaseClient
+                .from('team_members')
+                .select('*, teams(*)')
+                .eq('user_id', user.id);
+
+            if (mError) {
+                console.error("❌ 讀取成員表失敗:", mError);
+                throw mError;
+            }
+
+            console.log("✅ 成功獲取球隊清單, 數量:", members?.length);
+
+            if (members && members.length > 0) {
+                state.myTeams = members.map(m => m.teams).filter(t => t !== null) || [];
+                state.activeTeam = state.myTeams[0];
+                state.myMemberId = members[0].id;
+                state.myRole = members[0].role;
+                console.log("🚀 進入主畫面, Active Team:", state.activeTeam.name);
+            } else {
+                // 邏輯 2: 沒加入球隊也視為資料不全 (與 App 版 hasTeams == false 一致)
+                console.log("⚠️ 尚未加入任何球隊, 引導至設定頁面");
+                renderProfileSetup();
+                return;
+            }
+
+            hideLoading();
+            switchTab(0);
+        } catch (err) {
+            console.error("💥 同步過程發生崩潰:", err);
+            document.getElementById('loading-screen').innerHTML = `
+                <div class="p-6 text-center">
+                    <p class='text-red-500 font-bold mb-2'>資料同步失敗</p>
+                    <p class='text-gray-400 text-xs mb-4'>${err.message || '未知錯誤'}</p>
+                    <button onclick="location.reload()" class="bg-[#04432C] text-white px-6 py-2 rounded-full text-sm">重試</button>
+                </div>
+            `;
         }
-
-        state.dbUser = user;
-
-        // 獲取所屬球隊與角色
-        const { data: members } = await supabaseClient
-            .from('team_members')
-            .select('*, teams(*)')
-            .eq('user_id', user.id);
-
-        if (members && members.length > 0) {
-            state.myTeams = members.map(m => m.teams) || [];
-            state.activeTeam = state.myTeams[0];
-            state.myMemberId = members[0].id;
-            state.myRole = members[0].role;
-        } else {
-            // 邏輯 2: 沒加入球隊也視為資料不全 (與 App 版 hasTeams == false 一致)
-            renderProfileSetup();
-            return;
-        }
-
-        hideLoading();
-        switchTab(0);
     }
 
     // --- UI 渲染邏輯 ---
