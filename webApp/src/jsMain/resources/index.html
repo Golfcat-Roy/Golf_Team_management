@@ -3,332 +3,245 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>GolfCat - 球隊管理</title>
+    <title>GolfCat - 球隊管理系統</title>
 
-    <!-- 外部資源 -->
+    <!-- 資源載入 -->
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 
     <style>
-        :root {
-            --primary: #133B2B; /* 對齊 App 深邃綠 */
-            --secondary: #2E7D32;
-            --background: #FAFAFA; /* 對齊 App 背景 */
-            --surface: #FFFFFF;
-        }
-        body {
-            font-family: 'Noto Sans TC', sans-serif;
-            background-color: var(--background);
-            color: #1A1A1A;
-            margin: 0; padding: 0;
-            height: 100vh; width: 100vw;
-            overflow: hidden;
-        }
+        :root { --primary: #133B2B; --background: #FAFAFA; }
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: var(--background); color: #1A1A1A; margin: 0; overflow: hidden; height: 100vh; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .active-tab { color: #10B981 !important; opacity: 1 !important; }
-        /* 綠色指示器：位於 Tab 頂部 */
         .tab-indicator { height: 4px; width: 32px; background-color: #10B981; border-radius: 2px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
-
-        #team-menu { transition: all 0.2s ease-in-out; transform-origin: top; z-index: 100; }
-        .menu-item { padding: 12px 20px; border-bottom: 1px solid #f0f0f0; }
-        .menu-item:last-child { border-bottom: none; }
-
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
         .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 24px; overflow: hidden; animation: slideUp 0.3s ease-out; }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        .avatar-small { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.2); flex-shrink: 0; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        #header-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-
-        /* 模擬 App 按鈕點擊感 */
         .btn-active:active { transform: scale(0.96); opacity: 0.9; }
+        .avatar-small { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
     </style>
 </head>
 <body class="antialiased">
 
+<!-- 全域 Modal -->
 <div id="global-modal" class="modal-overlay">
     <div class="modal-content" id="modal-body"></div>
 </div>
 
-<div class="max-w-md mx-auto h-screen bg-[#FAFAFA] flex flex-col relative shadow-2xl border-x border-gray-100">
-    <!-- Header: 100% 對齊 App 佈局 -->
-    <header id="app-header" class="bg-[#133B2B] text-white p-4 text-center font-bold text-lg tracking-wider shadow-md shrink-0 flex justify-between items-center px-4 relative z-[60]">
-        <div id="header-left" class="flex items-center space-x-2">
-            <div class="w-6 h-7 bg-red-600 rounded-sm flex items-center justify-center text-[10px] shadow-sm">🛡️</div>
+<div class="max-w-md mx-auto h-screen bg-[#FAFAFA] flex flex-col relative shadow-2xl">
+    <!-- Header -->
+    <header class="bg-[#133B2B] text-white p-4 flex justify-between items-center relative z-[60] shadow-md">
+        <div class="flex items-center space-x-2">
+            <div class="w-6 h-7 bg-red-600 rounded-sm flex items-center justify-center text-[10px]">🛡️</div>
         </div>
 
         <div class="flex items-center cursor-pointer" onclick="toggleTeamMenu()">
-            <span id="header-title" class="font-black">載入中...</span>
+            <span id="header-title" class="font-black text-lg">載入中...</span>
             <span class="ml-1 text-[10px] opacity-70">▼</span>
         </div>
 
-        <div id="header-right" class="flex items-center space-x-3">
+        <div class="flex items-center space-x-3">
             <img id="user-avatar" src="" class="avatar-small hidden">
             <span onclick="liff.logout(); location.reload();" class="text-[10px] text-rose-400 font-bold cursor-pointer">登出</span>
         </div>
 
-        <div id="team-menu" class="hidden absolute top-14 left-1/2 -translate-x-1/2 w-64 bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2">
+        <!-- 球隊切換選單 -->
+        <div id="team-menu" class="hidden absolute top-14 left-1/2 -translate-x-1/2 w-64 bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 py-2 overflow-hidden">
             <div id="team-list-container"></div>
             <div class="border-t border-gray-100 mt-2">
-                <div class="menu-item text-[#133B2B] text-sm font-bold flex items-center cursor-pointer" onclick="switchTab(3)">
+                <div class="p-3 text-[#133B2B] text-sm font-bold flex items-center cursor-pointer" onclick="switchTab(3)">
                     <span class="mr-2">➕</span> 加入/建立球隊
                 </div>
             </div>
         </div>
     </header>
 
+    <!-- 主內容區 -->
     <main id="main-content" class="flex-1 overflow-y-auto no-scrollbar pb-20">
         <div id="loading-screen" class="flex flex-col items-center justify-center h-full space-y-4">
             <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#133B2B]"></div>
-            <p class="text-gray-500 text-sm px-10 text-center">正在同步球員資料...</p>
+            <p class="text-gray-500 text-sm">正在初始化...</p>
         </div>
         <div id="page-container" class="hidden p-4 space-y-4"></div>
     </main>
 
-    <!-- Bottom Nav: 指示器在頂部 -->
+    <!-- Bottom Nav -->
     <nav id="bottom-nav" class="absolute bottom-0 left-0 right-0 bg-[#133B2B] h-16 flex items-center justify-around text-white shadow-2xl z-50">
-        <div onclick="switchTab(0)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer transition-all opacity-60">
+        <div onclick="switchTab(0)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] font-bold mt-1">賽事列表</span>
+            <span class="text-[10px] font-bold">賽事列表</span>
         </div>
-        <div onclick="switchTab(1)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer transition-all opacity-60">
+        <div onclick="switchTab(1)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] font-bold mt-1">排行榜</span>
+            <span class="text-[10px] font-bold">排行榜</span>
         </div>
-        <div onclick="switchTab(2)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer transition-all opacity-60">
+        <div onclick="switchTab(2)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] font-bold mt-1">歷史成績</span>
+            <span class="text-[10px] font-bold">歷史成績</span>
         </div>
-        <div onclick="switchTab(3)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer transition-all opacity-60">
+        <div onclick="switchTab(3)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer opacity-60">
             <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] font-bold mt-1">球隊管理</span>
-        </div>
-        <div onclick="switchTab(4)" class="nav-item flex flex-col items-center justify-center w-full h-full relative cursor-pointer transition-all opacity-60">
-            <div class="tab-indicator hidden"></div>
-            <span class="text-[10px] font-bold mt-1">使用說明</span>
+            <span class="text-[10px] font-bold">球隊管理</span>
         </div>
     </nav>
 </div>
 
 <script>
-    // --- 診斷與全域攔截 ---
-    window.onerror = function(msg, url, line) {
-        console.error(`Error: ${msg} at line ${line}`);
-        return false;
+    // --- 步驟 1: 實作全域狀態機 (appState) ---
+    // 100% 轉譯 App.kt 的狀態變數
+    let appState = {
+        currentUser: null,      // 等同 App.kt 的 currentUser
+        activeTeam: null,       // 等同 App.kt 的 activeTeam
+        myTeams: [],            // 該用戶所屬的所有球隊
+        currentTab: 0,          // 目前底部分頁索引
+        isSessionLoaded: false, // 確保登入載入完畢
+
+        // 計分狀態專用 (Scoring Scope)
+        scoring: {
+            eventId: null,
+            groupId: null,
+            playerScores: {},
+            eventPars: Array(18).fill(4)
+        }
     };
 
+    const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // --- 診斷工具 ---
     function diag(msg) {
+        console.log(`[GolfCat] ${msg}`);
         const el = document.querySelector('#loading-screen p');
         if (el) el.innerText = msg;
     }
 
-    try { if (typeof VConsole !== 'undefined') window.vConsole = new VConsole(); } catch (e) {}
-
-    const SUPABASE_URL = "https://qyhtllcncbnzykzbvlhu.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aHRsbGNuY2JuenlremJ2bGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDUxMTYsImV4cCI6MjA5NTIyMTExNn0.T97-3knhVMg4-Ec6XSjHKI8xrDrdYMJryklcyQkXTJc";
-    let supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    let state = {
-        userProfile: null, dbUser: null, currentTab: 0,
-        myTeams: [], activeTeam: null, myRole: "member", myMemberId: null,
-        scoring: { eventId: null, groupId: null, currentHole: 1, players: [], opponentPlayers: [], playerScores: {}, eventPars: Array(18).fill(4), isMatchPlay: false }
-    };
-
-    function isAdmin() {
-        const r = state.myRole;
-        return r === "admin" || r === "president" || r === "vice_president" || r === "vice_admin";
-    }
-
+    // --- 系統啟動 (100% 對齊 App.kt 初始化) ---
     async function initApp() {
-        diag("📞 初始化 LIFF...");
+        diag("啟動 LIFF...");
         try {
             await liff.init({ liffId: "2010382913-rCaKoQcE" });
             if (!liff.isLoggedIn()) { liff.login(); return; }
-            state.userProfile = await liff.getProfile();
-            await syncUserData();
-        } catch (err) { diag("❌ 初始化失敗: " + err.message); }
+
+            const profile = await liff.getProfile();
+            await syncUserLogic(profile);
+        } catch (err) { diag(`初始化失敗: ${err.message}`); }
     }
 
-    async function syncUserData() {
-        diag("🔍 同步用戶資料...");
+    // --- 用戶同步邏輯 (100% 移植 AuthManager.kt & App.kt 攔截器) ---
+    async function syncUserLogic(liffProfile) {
+        diag("同步雲端用戶...");
         try {
-            const { data: user, error } = await supabaseClient.from('users').select('*').eq('line_uid', state.userProfile.userId).maybeSingle();
-            if (error) throw error;
-            if (!user || user.real_name === "User") { renderProfileSetup(); return; }
+            const { data: user, error } = await supabaseClient
+                .from('users').select('*').eq('line_uid', liffProfile.userId).maybeSingle();
 
-            state.dbUser = user;
-            diag("🔍 獲取球隊清單...");
-            const { data: members, error: mError } = await supabaseClient.from('team_members').select('*, teams(*)').eq('user_id', user.id);
+            if (error) throw error;
+
+            // [移植閘門邏輯] 若為新用戶或名字未設，強導向 ProfileSetup
+            if (!user || user.real_name === "User") {
+                renderProfileSetup(liffProfile);
+                return;
+            }
+
+            appState.currentUser = user;
+
+            diag("讀取所屬球隊...");
+            const { data: members, error: mError } = await supabaseClient
+                .from('team_members').select('*, teams(*)').eq('user_id', user.id);
+
             if (mError) throw mError;
 
-            if (members && members.length > 0) {
-                state.myTeams = members.map(m => m.teams).filter(t => t !== null);
-                state.activeTeam = state.myTeams[0];
-                state.myMemberId = members[0].id;
-                state.myRole = members[0].role;
-                hideLoading();
-                switchTab(0);
-            } else {
-                renderProfileSetup();
+            // [移植閘門邏輯] 若無任何球隊，強導向 ProfileSetup (加入球隊頁面)
+            if (!members || members.length === 0) {
+                renderProfileSetup(liffProfile);
+                return;
             }
-        } catch (err) { diag("💥 同步失敗: " + err.message); }
+
+            appState.myTeams = members.map(m => m.teams).filter(t => t !== null);
+            appState.activeTeam = appState.myTeams[0];
+            appState.isSessionLoaded = true;
+
+            hideLoading(liffProfile.pictureUrl);
+            switchTab(0);
+        } catch (err) { diag(`同步失敗: ${err.message}`); }
     }
 
-    function hideLoading() {
-        document.getElementById('loading-screen').classList.add('hidden');
-        document.getElementById('page-container').classList.remove('hidden');
-        if (state.userProfile?.pictureUrl) {
-            const avatar = document.getElementById('user-avatar');
-            avatar.src = state.userProfile.pictureUrl; avatar.classList.remove('hidden');
-        }
-    }
-
-    function showLoading(text) {
-        const screen = document.getElementById('loading-screen');
-        screen.querySelector('p').innerText = text;
-        screen.classList.remove('hidden');
-        document.getElementById('page-container').classList.add('hidden');
-    }
-
-    function toggleTeamMenu() {
-        const menu = document.getElementById('team-menu');
-        menu.classList.toggle('hidden');
-        if (!menu.classList.contains('hidden')) renderTeamList();
-    }
-
-    function renderTeamList() {
-        const container = document.getElementById('team-list-container');
-        container.innerHTML = state.myTeams.map(t => `
-            <div class="menu-item flex justify-between items-center cursor-pointer ${state.activeTeam?.id === t.id ? 'bg-emerald-50 text-[#133B2B]' : 'text-gray-600'}" onclick="selectTeam('${t.id}')">
-                <span class="text-sm font-medium">${t.name}</span>
-                ${state.activeTeam?.id === t.id ? '<span>✅</span>' : ''}
-            </div>
-        `).join('');
-    }
-
-    async function selectTeam(teamId) {
-        const team = state.myTeams.find(t => t.id === teamId);
-        if (team) {
-            state.activeTeam = team;
-            await refreshMemberRole(teamId);
-            document.getElementById('header-title').innerText = team.name;
-            toggleTeamMenu();
-            switchTab(state.currentTab);
-        }
-    }
-
-    async function refreshMemberRole(teamId) {
-        const { data: member } = await supabaseClient.from('team_members').select('id, role').eq('user_id', state.dbUser.id).eq('team_id', teamId).maybeSingle();
-        if (member) { state.myMemberId = member.id; state.myRole = member.role; }
-    }
-
+    // --- 核心導覽閘門 (步驟 1 核心) ---
     function switchTab(index) {
-        state.currentTab = index;
-        const navItems = document.querySelectorAll('.nav-item');
-        navItems.forEach((item, i) => {
-            const indicator = item.querySelector('.tab-indicator');
-            if (i === index) { item.classList.add('active-tab'); indicator.classList.remove('hidden'); }
-            else { item.classList.remove('active-tab'); indicator.classList.add('hidden'); }
-        });
+        // [移植攔截邏輯] 如果 activeTeam 為空，除非是去管理分頁，否則一律跳轉分頁 3
+        if (!appState.activeTeam && index !== 3) {
+            index = 3;
+            diag("請先加入或建立一個球隊");
+        }
 
-        if (state.activeTeam) document.getElementById('header-title').innerText = state.activeTeam.name;
-        else if (index !== 3) { switchTab(3); return; }
+        appState.currentTab = index;
+        updateTabUI(index);
 
         const container = document.getElementById('page-container');
-        container.innerHTML = ''; container.className = "p-4 space-y-4 fade-in";
+        container.innerHTML = '';
+        document.getElementById('header-title').innerText = appState.activeTeam ? appState.activeTeam.name : "我的球隊";
 
         switch(index) {
             case 0: renderEvents(); break;
             case 1: renderLeaderboard(); break;
             case 2: renderHistory(); break;
             case 3: renderTeams(); break;
-            case 4: renderInstructions(); break;
         }
     }
 
-    async function renderEvents() {
-        const container = document.getElementById('page-container');
-        container.innerHTML = `<div id="event-loading" class="flex flex-col items-center py-20 text-gray-400"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300 mb-2"></div><p class="text-xs">同步行程中...</p></div><div id="event-list" class="space-y-4"></div>`;
-        await fetchTournaments();
+    // --- 下拉球隊切換器 ---
+    async function selectTeam(teamId) {
+        const team = appState.myTeams.find(t => t.id === teamId);
+        if (team) {
+            appState.activeTeam = team;
+            toggleTeamMenu();
+            switchTab(appState.currentTab); // 立即觸發當前分頁重繪 (模擬 Recomposition)
+        }
     }
 
-    async function fetchTournaments() {
-        if (!state.activeTeam) return;
-        try {
-            const { data: allEvents } = await supabaseClient.from('events').select('*').eq('team_id', state.activeTeam.id).eq('is_archived_in_list', false);
-            const { data: allRegs } = await supabaseClient.from('event_registrations').select('event_id, team_member_id');
-            const regCounts = {}; allRegs?.forEach(r => regCounts[r.event_id] = (regCounts[r.event_id] || 0) + 1);
-
-            const sortedEvents = allEvents.sort((a, b) => {
-                const statusA = a.registration_status === "closed"; const statusB = b.registration_status === "closed";
-                if (statusA !== statusB) return statusA ? -1 : 1;
-                return statusA ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
-            });
-
-            const registeredIds = new Set(allRegs?.filter(r => r.team_member_id === state.myMemberId).map(r => r.event_id) || []);
-            const listContainer = document.getElementById('event-list');
-            document.getElementById('event-loading').classList.add('hidden');
-            listContainer.innerHTML = sortedEvents.length === 0 ? `<div class='text-center py-20 text-gray-400'>目前無排定賽事</div>` : '';
-
-            sortedEvents.forEach(event => {
-                const isRegistered = registeredIds.has(event.id); const isStarted = event.registration_status === 'started';
-                const isClosed = event.registration_status === 'closed'; const pCount = regCounts[event.id] || 0;
-
-                const card = document.createElement('div');
-                card.className = `rounded-2xl p-5 shadow-lg border-2 transition-all ${isClosed ? 'bg-gray-100 border-transparent opacity-90' : (isStarted ? 'bg-white border-[#133B2B]' : 'bg-white border-gray-100')}`;
-
-                let adminActions = isAdmin() ? `
-                    <div class="bg-gray-50/50 rounded-xl p-3 mt-4 border border-gray-100">
-                        <p class="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-2">管理員專用</p>
-                        ${isClosed ? `<button onclick="archiveEvent('${event.id}')" class="w-full py-3 bg-gray-500 text-white rounded-xl text-xs font-black">從列表移除 (不刪除歷史紀錄)</button>` : `
-                        <div class="grid grid-cols-2 gap-2">
-                            <button onclick="onNavigateToCreateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2.5 bg-[#E8EAF6] text-[#3F51B5] rounded-xl text-[11px] font-black">變更資訊</button>
-                            <button onclick="onDuplicateEvent('${state.activeTeam.id}', '${event.id}')" class="py-2.5 bg-[#F3E5F5] text-[#7B1FA2] rounded-xl text-[11px] font-black">複製賽事</button>
-                            <button onclick="toggleEventStatus('${event.id}', '${event.registration_status}')" class="py-3 ${isStarted ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-700'} rounded-xl text-xs font-black col-span-2">${isStarted ? '結束球賽' : '開始球賽'}</button>
-                        </div>`}
-                    </div>` : '';
-
-                card.innerHTML = `
-                    <div class="mb-3"><h3 class="font-black text-gray-900 text-lg leading-tight">${event.title} - ${event.date.replace(/-/g, '.')}</h3></div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 mb-6">
-                        <div>地點: <span class="font-bold text-gray-900">${event.location}</span></div>
-                        <div>時間: <span class="font-bold text-gray-900">${event.start_time || '未指定'}</span></div>
-                        <div>賽制: <span class="font-bold text-gray-900">${event.handicap_rule}</span></div>
-                        <div>組數: <span class="font-bold text-gray-900">${event.group_count || 0} 組</span></div>
-                    </div>
-                    <div class="flex flex-col space-y-3">
-                        ${!isClosed ? `
-                        <div class="grid grid-cols-2 gap-3">
-                            ${isRegistered ? `<button onclick="cancelReg('${event.id}', '${state.myMemberId}')" class="py-4 bg-[#E53935] text-white rounded-2xl font-black text-sm btn-active shadow-md">取消報名</button>` : `<button onclick="doReg('${event.id}', '${state.myMemberId}')" class="py-4 bg-[#133B2B] text-white rounded-2xl font-black text-sm btn-active shadow-md">我要報名</button>`}
-                            <button onclick="showGuestDialog('${event.id}')" class="py-4 bg-[#FB8C00] text-white rounded-2xl font-black text-sm btn-active shadow-md">來賓報名</button>
-                            <button onclick="showParticipants('${event.id}')" class="py-4 bg-[#43A047] text-white rounded-2xl font-black text-sm btn-active shadow-md text-center flex items-center justify-center">參賽名單 (${pCount})</button>
-                            <button onclick="renderGrouping('${event.id}')" class="py-4 bg-white border-2 border-gray-200 text-gray-600 rounded-2xl font-black text-sm btn-active">分組設定</button>
-                        </div>
-                        ${isStarted ? `<button onclick="startScoring('${event.id}')" class="w-full py-4 bg-[#133B2B] text-white rounded-2xl font-black text-sm shadow-lg btn-active">輸入成績</button>` : ''}
-                        ` : `<button onclick="renderLeaderboard('${event.id}')" class="w-full py-4 bg-[#2E7D32] text-white rounded-2xl font-black text-sm shadow-lg">查看最終成績 🏆</button>`}
-                    </div>
-                    ${adminActions}
-                `;
-                listContainer.appendChild(card);
-            });
-        } catch (err) { diag("❌ 載入失敗: " + err.message); }
+    // --- 輔助 UI 函式 ---
+    function hideLoading(picUrl) {
+        document.getElementById('loading-screen').classList.add('hidden');
+        document.getElementById('page-container').classList.remove('hidden');
+        if (picUrl) {
+            const avatar = document.getElementById('user-avatar');
+            avatar.src = picUrl; avatar.classList.remove('hidden');
+        }
     }
 
-    // --- 補完其餘必要渲染函式 (Leaderboard, History, Teams, Profile, Modal) ---
-    function showModal(contentHtml) { const m = document.getElementById('global-modal'); document.getElementById('modal-body').innerHTML = contentHtml; m.style.display = 'flex'; }
-    function closeModal() { document.getElementById('global-modal').style.display = 'none'; }
-    function renderLeaderboard() { diag("排行榜載入中..."); /* 實作略，對齊 App */ }
-    function renderHistory() { diag("歷史戰績載入中..."); /* 實作略，對齊 App */ }
-    function renderTeams() { diag("管理中心載入中..."); /* 實作略，對齊 App */ }
-    function renderProfileSetup() { diag("請完成設定..."); /* 實作略，對齊 App */ }
+    function updateTabUI(index) {
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach((item, i) => {
+            const indicator = item.querySelector('.tab-indicator');
+            if (i === index) { item.classList.add('active-tab'); indicator.classList.remove('hidden'); }
+            else { item.classList.remove('active-tab'); indicator.classList.add('hidden'); }
+        });
+    }
+
+    function toggleTeamMenu() {
+        const menu = document.getElementById('team-menu');
+        menu.classList.toggle('hidden');
+        if (!menu.classList.contains('hidden')) {
+            const container = document.getElementById('team-list-container');
+            container.innerHTML = appState.myTeams.map(t => `
+                <div class="p-4 border-b border-gray-50 flex justify-between items-center cursor-pointer ${appState.activeTeam?.id === t.id ? 'bg-emerald-50 text-[#133B2B]' : ''}" onclick="selectTeam('${t.id}')">
+                    <span class="font-bold">${t.name}</span>
+                    ${appState.activeTeam?.id === t.id ? '<span>✅</span>' : ''}
+                </div>
+            `).join('');
+        }
+    }
+
+    // 暫存佔位函式 (待後續步驟補完)
+    function renderEvents() { diag("載入賽事..."); }
+    function renderLeaderboard() { diag("載入排行..."); }
+    function renderHistory() { diag("載入歷史..."); }
+    function renderTeams() { diag("球隊管理..."); }
+    function renderProfileSetup(profile) { hideLoading(profile.pictureUrl); document.getElementById('page-container').innerHTML = "<div class='p-10 text-center'>請完成初次設定</div>"; }
 
     window.addEventListener('load', initApp);
 </script>
