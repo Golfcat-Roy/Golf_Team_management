@@ -80,15 +80,18 @@
         if (!members || members.length === 0) { renderProfileSetup(); return; }
         appState.myTeams = members.map(m => m.teams).filter(t => t !== null);
         appState.activeTeam = appState.myTeams[0];
-        const activeMember = members.find(m => m.team_id === appState.activeTeam.id);
-        appState.currentUser.role = activeMember?.role || 'member';
-        appState.currentUser.memberId = activeMember?.id;
+        await refreshRole();
         hideLoading(liffProfile.pictureUrl);
         switchTab(0);
     }
 
+    async function refreshRole() {
+        const { data: m } = await supabaseClient.from('team_members').select('*').eq('user_id',appState.currentUser.id).eq('team_id',appState.activeTeam.id).single();
+        appState.currentUser.role = m.role; appState.currentUser.memberId = m.id;
+    }
+
     function switchTab(index) {
-        if (!appState.activeTeam && index !== 3) index = 3;
+        if (!appState.activeTeam && index !== 3 && index !== 4) index = 3;
         appState.currentTab = index; updateTabUI(index);
         const container = document.getElementById('page-container');
         container.innerHTML = ''; container.className = "p-4 space-y-4 fade-in";
@@ -106,29 +109,101 @@
     // --- 4. [TeamRepository.kt] & [EventListTab.kt] ---
     async function renderEvents() {
         showTabLoading();
-        const { data: events } = await supabaseClient.from('events').select('*').eq('team_id', appState.activeTeam.id).eq('is_archived_in_list', false).order('date', { ascending: false });
-        const { data: myRegs } = await supabaseClient.from('event_registrations').select('event_id').eq('team_member_id', appState.currentUser.memberId);
-        const regIds = new Set(myRegs?.map(r => r.event_id) || []);
-        const { data: allRegs } = await supabaseClient.from('event_registrations').select('event_id');
-        const counts = {}; allRegs?.forEach(r => counts[r.event_id] = (counts[r.event_id] || 0) + 1);
+        try {
+            const { data: events } = await supabaseClient.from('events').select('*').eq('team_id', appState.activeTeam.id).eq('is_archived_in_list', false).order('date', { ascending: false });
+            const { data: myRegs } = await supabaseClient.from('event_registrations').select('event_id').eq('team_member_id', appState.currentUser.memberId);
+            const regIds = new Set(myRegs?.map(r => r.event_id) || []);
+            const { data: allRegs } = await supabaseClient.from('event_registrations').select('event_id');
+            const counts = {}; allRegs?.forEach(r => counts[r.event_id] = (counts[r.event_id] || 0) + 1);
 
-        const container = document.getElementById('page-container');
-        container.innerHTML = events.map(e => {
-            const isReg = regIds.has(e.id); const isStarted = e.registration_status === 'started'; const isClosed = e.registration_status === 'closed';
-            const isAdmin = ['admin','president','vice_president'].includes(appState.currentUser.role);
-            return `<div class="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 mb-4">
-                <div class="flex justify-between items-start mb-4"><h3 class="font-black text-gray-900 text-lg">${e.title}</h3><span class="text-[9px] font-black px-2 py-1 rounded-lg ${isClosed?'bg-gray-100 text-gray-400':(isStarted?'bg-emerald-100 text-emerald-700':'bg-blue-50 text-blue-600')}">${isClosed?'已結賽':(isStarted?'進行中':'報名中')}</span></div>
-                <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-6 bg-gray-50 p-4 rounded-3xl"><div>地點: <span class="font-bold text-gray-900">${e.location}</span></div><div>時間: <span class="font-bold text-gray-900">${e.start_time || '未定'}</span></div></div>
-                <div class="flex flex-col space-y-2">${!isClosed ? `<div class="grid grid-cols-2 gap-2">${isReg ? `<button onclick="cancelReg('${e.id}')" class="py-3.5 bg-rose-500 text-white rounded-2xl font-black text-xs btn-active shadow-lg">取消報名</button>` : `<button onclick="doReg('${e.id}')" class="py-3.5 bg-[#133B2B] text-white rounded-2xl font-black text-xs btn-active shadow-lg">我要報名</button>`}<button onclick="showGuestDialog('${e.id}')" class="py-3.5 bg-amber-500 text-white rounded-2xl font-black text-xs btn-active shadow-lg">來賓報名</button></div>
-                <div class="grid grid-cols-2 gap-2"><button onclick="showParticipants('${e.id}')" class="py-3 bg-emerald-50 text-emerald-700 rounded-2xl font-bold text-xs">參賽名單 (${counts[e.id]||0})</button>${isStarted ? `<button onclick="startScoring('${e.id}')" class="py-3 bg-emerald-600 text-white rounded-2xl font-bold text-xs shadow-md">進入計分</button>` : (isAdmin?`<button onclick="renderGrouping('${e.id}')" class="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold text-xs">分組設定</button>`:`<button class="py-3 bg-gray-50 text-gray-300 rounded-2xl font-bold text-xs">等待開賽</button>`)}</div>
-                ${isAdmin?`<div class="grid grid-cols-2 gap-2 mt-4"><button onclick="duplicateEvent('${e.id}')" class="py-2.5 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black">複製賽事</button><button onclick="toggleEventStatus('${e.id}', '${e.registration_status}')" class="py-2.5 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black">${isStarted?'結束球賽':'開始球賽'}</button></div>`:''}` : `<button onclick="renderEventLeaderboard('${e.id}')" class="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-sm shadow-md">查看最終成績 🏆</button>`}</div></div>`;
-        }).join('') || `<div class="text-center py-20 text-gray-300 italic">尚無球賽行程</div>`;
+            const container = document.getElementById('page-container');
+            container.innerHTML = events.map(e => {
+                const isReg = regIds.has(e.id); const isStarted = e.registration_status === 'started'; const isClosed = e.registration_status === 'closed';
+                const isAdmin = ['admin','president','vice_president'].includes(appState.currentUser.role);
+                return `<div class="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 mb-4 transition-all ${isStarted?'border-[#133B2B] shadow-md':''}">
+                    <div class="flex justify-between items-start mb-4"><div><h3 class="font-black text-gray-900 text-lg">${e.title}</h3><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">${e.date.replace(/-/g, '.')}</p></div><span class="text-[9px] font-black px-2 py-1 rounded-lg ${isClosed?'bg-gray-100 text-gray-400':(isStarted?'bg-emerald-100 text-emerald-700':'bg-blue-50 text-blue-600')}">${isClosed?'已結賽':(isStarted?'進行中':'報名中')}</span></div>
+                    <div class="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-6 bg-gray-50 p-4 rounded-3xl"><div>地點: <span class="font-bold text-gray-900">${e.location}</span></div><div>時間: <span class="font-bold text-gray-900">${e.start_time || '未定'}</span></div></div>
+                    <div class="flex flex-col space-y-2">
+                        ${!isClosed ? `
+                            <div class="grid grid-cols-2 gap-2">
+                                ${isReg ? `<button onclick="cancelReg('${e.id}')" class="py-3.5 bg-rose-500 text-white rounded-2xl font-black text-xs btn-active shadow-lg">取消報名</button>` : `<button onclick="doReg('${e.id}')" class="py-3.5 bg-[#133B2B] text-white rounded-2xl font-black text-xs btn-active shadow-lg">我要報名</button>`}
+                                <button onclick="showGuestDialog('${e.id}')" class="py-3.5 bg-amber-500 text-white rounded-2xl font-black text-xs btn-active shadow-lg">來賓報名</button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="showParticipants('${e.id}')" class="py-3 bg-emerald-50 text-emerald-700 rounded-2xl font-bold text-xs">參賽名單 (${counts[e.id]||0})</button>
+                                ${isStarted ? `<button onclick="startScoring('${e.id}')" class="py-3 bg-emerald-600 text-white rounded-2xl font-bold text-xs shadow-md">進入計分</button>` : (isAdmin?`<button onclick="renderGrouping('${e.id}')" class="py-3 bg-gray-100 text-gray-700 rounded-2xl font-bold text-xs">分組設定</button>`:`<button class="py-3 bg-gray-50 text-gray-300 rounded-2xl font-bold text-xs">等待開賽</button>`)}
+                            </div>
+                            ${isAdmin?`<div class="grid grid-cols-2 gap-2 mt-4"><button onclick="duplicateEvent('${e.id}')" class="py-2.5 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black">複製賽事</button><button onclick="toggleEventStatus('${e.id}', '${e.registration_status}')" class="py-2.5 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black">${isStarted?'結束球賽':'開始球賽'}</button></div>`:''}`
+                        : `<button onclick="renderEventLeaderboard('${e.id}')" class="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-sm shadow-md">查看最終成績 🏆</button>`}
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (err) { diag(`❌ 載入失敗: ${translateError(err)}`); }
     }
 
-    async function doReg(id) { await supabaseClient.from('event_registrations').insert({ event_id: id, team_member_id: appState.currentUser.memberId }); renderEvents(); }
-    async function cancelReg(id) { if(confirm("取消報名？")) { await supabaseClient.from('event_registrations').delete().eq('event_id', id).eq('team_member_id', appState.currentUser.memberId); renderEvents(); } }
-    async function duplicateEvent(id) { const {data:e} = await supabaseClient.from('events').select('*').eq('id',id).single(); delete e.id; delete e.created_at; e.date = new Date().toISOString().split('T')[0]; await supabaseClient.from('events').insert(e); alert("已複製新賽事"); renderEvents(); }
-    async function toggleEventStatus(id, cur) { const next = cur==='started'?'closed':'started'; if(confirm(`切換狀態至 ${next}?`)) { await supabaseClient.from('events').update({registration_status: next}).eq('id', id); renderEvents(); } }
+    // --- [TeamRepository.kt] 賽事控制邏輯 100% 轉譯 ---
+    async function toggleEventStatus(eventId, curStatus) {
+        const nextStatus = curStatus === 'started' ? 'closed' : 'started';
+
+        // 邏輯 1: [開賽檢查] (100% 移植自 startEvent)
+        if (curStatus === 'open' || !curStatus) {
+            diag("執行開賽安全檢查...");
+            try {
+                const { count: regCount } = await supabaseClient.from('event_registrations').select('*', { count: 'exact', head: true }).eq('event_id', eventId);
+                const { data: groups } = await supabaseClient.from('event_groups').select('id').eq('event_id', eventId);
+                const groupIds = groups?.map(g => g.id) || [];
+                const { count: assignedCount } = await supabaseClient.from('event_group_members').select('*', { count: 'exact', head: true }).in('group_id', groupIds);
+
+                if (regCount > assignedCount) {
+                    alert(`❌ 攔截：尚有 ${regCount - assignedCount} 位球員未完成分組。請先完成分組後再開始球賽！`);
+                    return;
+                }
+            } catch (e) { alert("檢查過程發生錯誤"); return; }
+        }
+
+        // 邏輯 2: [結賽結算 - 新新貝利亞] (100% 移植自 finishEvent)
+        if (curStatus === 'started') {
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            if (event.handicap_rule === 'New_New_Peoria') {
+                diag("正在計算隱藏洞投票結果...");
+                await settleNewNewPeoria(eventId);
+            }
+        }
+
+        if (confirm(`確認將賽事狀態切換至 ${nextStatus === 'started' ? '【進行中】' : '【已結賽】'}？`)) {
+            await supabaseClient.from('events').update({ registration_status: nextStatus }).eq('id', eventId);
+            renderEvents();
+        }
+    }
+
+    async function settleNewNewPeoria(eventId) {
+        const { data: votes } = await supabaseClient.from('new_peoria_votes').select('voted_holes').eq('event_id', eventId);
+        const counts = Array(19).fill(0);
+        votes?.forEach(v => v.voted_holes.forEach(h => counts[h]++));
+        // 抓出得票最高的 6 個洞 (對齊 HandicapCalculator 邏輯)
+        const hiddenHoles = counts.map((c, i) => ({h:i, c})).slice(1).sort((a,b) => b.c - a.c).slice(0, 6).map(x => x.h).sort((a,b)=>a-b);
+        await supabaseClient.from('events').update({ hidden_holes: hiddenHoles }).eq('id', eventId);
+    }
+
+    async function duplicateEvent(id) {
+        diag("正在執行賽事深拷貝...");
+        const { data: e } = await supabaseClient.from('events').select('*').eq('id', id).single();
+        const copy = {
+            team_id: e.team_id, title: e.title + " (複製)", location: e.location,
+            pars: e.pars, handicap_rule: e.handicap_rule, start_time: e.start_time,
+            registration_status: 'open', date: new Date().toISOString().split('T')[0]
+        };
+        await supabaseClient.from('events').insert(copy);
+        alert("已成功複製賽事設定！");
+        renderEvents();
+    }
+
+    async function archiveEvent(id) {
+        if (confirm("確定要從首頁清單移除此賽事嗎？(歷史數據將永久保留)")) {
+            await supabaseClient.from('events').update({ is_archived_in_list: true }).eq('id', id);
+            renderEvents();
+        }
+    }
 
     // --- 5. [ScoringScreen.kt] & [HandicapCalculator.kt] ---
     async function startScoring(eventId) {
@@ -142,8 +217,19 @@
         const { data: scores } = await supabaseClient.from('scores').select('*').eq('event_id', eventId);
         appState.scoring.playerScores = {}; appState.scoring.players.forEach((p,i) => { const s = scores.find(x=>x.team_member_id===p.id); appState.scoring.playerScores[p.id] = s ? s.hole_scores : Array(18).fill(0); });
 
-        // [移植 Smart Jump]
-        appState.scoring.currentHole = (Array.from({length:18},(_,i)=>i+1).find(h => appState.scoring.players.some(p => appState.scoring.playerScores[p.id][h-1] === 0))) || 1;
+        // --- [智慧導航 (Smart Jump) 100% 移植自 ScoringScreen.kt] ---
+        const isMatchPlay = appState.scoring.isMatchPlay;
+        const firstEmptyHole = (Array.from({length:18},(_,i)=>i+1).find(h => {
+            if (isMatchPlay) {
+                // 對抗賽：只要這組有人(代表)填過就視為已完成，因此找「全組皆為0」的第一個洞
+                return appState.scoring.players.every(p => appState.scoring.playerScores[p.id][h-1] === 0);
+            } else {
+                // 一般賽制：任何人沒填都算沒填，因此找「任一人為0」的第一個洞
+                return appState.scoring.players.some(p => appState.scoring.playerScores[p.id][h-1] === 0);
+            }
+        })) || 1;
+
+        appState.scoring.currentHole = firstEmptyHole;
         hideLoading(); renderScoringUI();
     }
 
@@ -152,58 +238,221 @@
         document.getElementById('header-title').innerText = `Hole ${h} (Par ${par})`;
         document.getElementById('bottom-nav').classList.add('hidden');
 
-        // [移植 Bonus 算法]
+        // [移植 Bonus 算法與鎖定文字]
         const list = appState.scoring.players.map((p,i) => {
             const isLocked = appState.scoring.isMatchPlay && i > 0;
             const score = appState.scoring.playerScores[p.id][h-1];
             const diff = score - par;
             let bonusText = ""; if(score > 0) { if(score===1 || diff<=-2) bonusText="🎯 Eagle+ (+1.0)"; else if(diff===-1) bonusText="🐦 Birdie (+0.5)"; }
-            return `<div class="bg-white p-5 rounded-[32px] shadow-sm mb-3 flex items-center justify-between border border-gray-50 ${isLocked?'opacity-50':''}">
-                <div><p class="font-black text-gray-800">${p.users.real_name}</p><p class="text-[9px] text-amber-500 font-bold uppercase">${bonusText}</p></div>
+            return `<div class="bg-white p-5 rounded-[32px] shadow-sm mb-3 flex items-center justify-between border border-gray-50 ${isLocked?'opacity-40':''}">
+                <div class="flex-1">
+                    <p class="font-black text-gray-800">${p.users.real_name}</p>
+                    ${isLocked
+                        ? `<p class="text-[9px] text-gray-400 font-bold uppercase">🔐 由隊友代表計分</p>`
+                        : `<p class="text-[9px] text-amber-500 font-bold uppercase">${bonusText}</p>`
+                    }
+                </div>
                 <div class="flex items-center space-x-3">
-                    <button ${isLocked?'disabled':`onclick="updateScore('${p.id}',-1)"`} class="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl font-light text-gray-400">-</button>
+                    <button ${isLocked?'disabled':`onclick="updateScore('${p.id}',-1)"`} class="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl font-light text-gray-400 ${isLocked?'cursor-not-allowed':''}">-</button>
                     <span class="w-10 text-center font-black text-2xl text-[#133B2B]">${score || '-'}</span>
-                    <button ${isLocked?'disabled':`onclick="updateScore('${p.id}',1)"`} class="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl font-light text-gray-400">+</button>
+                    <button ${isLocked?'disabled':`onclick="updateScore('${p.id}',1)"`} class="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl font-light text-gray-400 ${isLocked?'cursor-not-allowed':''}">+</button>
                 </div>
             </div>`;
         }).join('');
         document.getElementById('page-container').innerHTML = `<div class="flex justify-between mb-6 px-2"><button onclick="changeHole(-1)" class="w-14 h-14 bg-white rounded-2xl shadow-md font-bold">◀</button><button onclick="saveScores()" class="bg-[#133B2B] text-white px-8 rounded-2xl font-black shadow-lg">儲存並上傳</button><button onclick="changeHole(1)" class="w-14 h-14 bg-white rounded-2xl shadow-md font-bold">▶</button></div>${list}<button onclick="exitScoring()" class="w-full mt-10 text-gray-400 font-bold uppercase tracking-widest text-xs">退出計分板</button>`;
     }
-    function updateScore(id,d){ let v = appState.scoring.playerScores[id][appState.scoring.currentHole-1]; if(v===0)v=appState.scoring.eventPars[appState.scoring.currentHole-1]; v+=d; if(v<1)v=1; appState.scoring.playerScores[id][appState.scoring.currentHole-1]=v; renderScoringUI(); }
-    function changeHole(d){ let h=appState.scoring.currentHole+d; if(h<1)h=18; if(h>18)h=1; appState.scoring.currentHole=h; renderScoringUI(); }
+    function updateScore(id,d){
+        // --- [安全校驗 100% 移植] ---
+        const playerIndex = appState.scoring.players.findIndex(p => p.id === id);
+        if (appState.scoring.isMatchPlay && playerIndex > 0) return;
+
+        let v = appState.scoring.playerScores[id][appState.scoring.currentHole-1];
+        if(v===0)v=appState.scoring.eventPars[appState.scoring.currentHole-1];
+        v+=d; if(v<1)v=1;
+        appState.scoring.playerScores[id][appState.scoring.currentHole-1]=v;
+        renderScoringUI();
+    }
+    async function changeHole(d){
+        // --- [原子化存檔 100% 移植] ---
+        // 模仿 App 邏輯：在切換洞號前，先執行一次背景存檔，確保剛才輸入的資料不丟失
+        try {
+            // 這裡執行靜默存檔，不跳 Loading 視窗以維持流暢感
+            await supabaseClient.from('scores').upsert(appState.scoring.players.map(p=>({
+                event_id: appState.scoring.eventId,
+                team_member_id: p.id,
+                hole_scores: appState.scoring.playerScores[p.id],
+                gross_score: appState.scoring.playerScores[p.id].reduce((a,b)=>a+b,0)
+            })));
+        } catch (e) {
+            console.warn("背景存檔失敗，將於下次切換重試", e);
+        }
+
+        let h=appState.scoring.currentHole+d;
+        if(h<1)h=18; if(h>18)h=1;
+        appState.scoring.currentHole=h;
+        renderScoringUI();
+    }
     async function saveScores(){ showLoading("同步雲端..."); await supabaseClient.from('scores').upsert(appState.scoring.players.map(p=>({event_id:appState.scoring.eventId, team_member_id:p.id, hole_scores:appState.scoring.playerScores[p.id], gross_score:appState.scoring.playerScores[p.id].reduce((a,b)=>a+b,0)}))); hideLoading(); alert("同步完成"); }
     function exitScoring(){ document.getElementById('bottom-nav').classList.remove('hidden'); switchTab(0); }
 
-    // --- 6. [GroupingScreen.kt] & [MemberManagementTab.kt] ---
-    async function renderGrouping(eventId) {
-        showTabLoading();
-        const { data: regs } = await supabaseClient.from('event_registrations').select('*, team_members(*, users(*))').eq('event_id', eventId);
-        const { data: groups } = await supabaseClient.from('event_groups').select('*').eq('event_id', eventId).order('group_number');
-        const { data: gm } = await supabaseClient.from('event_group_members').select('*').in('group_id', groups.map(g=>g.id));
-        appState.grouping = { eventId, participants: regs.map(r=>r.team_members), draftGroups: groups.map(g=>({group:g, members: regs.map(r=>r.team_members).filter(p=>gm.some(x=>x.group_id===g.id && x.team_member_id===p.id))})), hasChanges: false };
-        refreshGroupingUI();
-    }
-    function refreshGroupingUI() {
-        const container = document.getElementById('page-container');
-        const assignedIds = new Set(appState.grouping.draftGroups.flatMap(dg=>dg.members.map(m=>m.id)));
-        const unassigned = appState.grouping.participants.filter(p=>!assignedIds.has(p.id));
-        container.innerHTML = `<div class="flex justify-between mb-6"><button onclick="switchTab(0)" class="text-gray-400 font-bold">取消</button><button onclick="saveGroups()" class="bg-[#133B2B] text-white px-6 py-2 rounded-xl font-bold shadow-lg">儲存分組</button></div>
-            <h4 class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-3">未分組成員 (${unassigned.length})</h4>
-            <div class="mb-8">${unassigned.map(p=>`<div class="bg-white p-3 rounded-xl mb-2 flex justify-between items-center shadow-sm"><span class="font-bold text-gray-800">${p.users.real_name}</span><select onchange="assignTo('${p.id}', this.value)" class="text-[10px] bg-emerald-50 text-emerald-700 border-none rounded-lg font-bold"><option value="">指派組別 ▼</option>${appState.grouping.draftGroups.map(dg=>`<option value="${dg.group.id}">第 ${dg.group.group_number} 組</option>`)}</select></div>`).join('') || '<p class="text-xs text-gray-300 italic">所有人員已分組</p>'}</div>
-            <h4 class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-3">正式組別</h4>
-            ${appState.grouping.draftGroups.map(dg=>`<div class="bg-white rounded-3xl border border-gray-100 mb-4 overflow-hidden shadow-sm"><div class="bg-gray-50 p-3 font-black text-sm border-b text-gray-600 flex justify-between"><span>第 ${dg.group.group_number} 組</span><button onclick="clearDraftGroup('${dg.group.id}')" class="text-rose-400 text-[9px] uppercase">清空</button></div><div class="p-4 flex flex-wrap gap-2">${dg.members.map(m=>`<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-2"><span>${m.users.real_name}</span><span onclick="removeDraftMember('${dg.group.id}','${m.id}')" class="text-rose-400 cursor-pointer">✕</span></div>`).join('') || '<p class="text-xs text-gray-300 italic">尚未指派成員</p>'}</div></div>`).join('')}`;
-    }
-    window.assignTo = (pid, gid) => { const p = appState.grouping.participants.find(x=>x.id===pid); appState.grouping.draftGroups.find(dg=>dg.group.id===gid).members.push(p); refreshGroupingUI(); };
-    window.removeDraftMember = (gid, pid) => { const dg = appState.grouping.draftGroups.find(x=>x.group.id===gid); dg.members = dg.members.filter(m=>m.id!==pid); refreshGroupingUI(); };
-    window.clearDraftGroup = (gid) => { appState.grouping.draftGroups.find(x=>x.group.id===gid).members = []; refreshGroupingUI(); };
-    async function saveGroups() { showLoading("更新分組..."); const groupIds = appState.grouping.draftGroups.map(dg=>dg.group.id); await supabaseClient.from('event_group_members').delete().in('group_id', groupIds); const ins = appState.grouping.draftGroups.flatMap(dg=>dg.members.map(m=>({group_id:dg.group.id, team_member_id:m.id}))); if(ins.length) await supabaseClient.from('event_group_members').insert(ins); hideLoading(); alert("分組儲存成功"); switchTab(0); }
+    // --- 6. [TeamRepository.kt] 行政管理邏輯 100% 移植 ---
+    async function joinTeam() {
+        const code = document.getElementById('join-code').value;
+        if (code.length !== 6) return alert("請輸入 6 位邀請碼");
 
-    // --- 7. [LeaderboardTab.kt] & [HistoryTab.kt] ---
-    async function renderLeaderboard() {
-        showTabLoading(); const { data: members } = await supabaseClient.from('team_members').select('*, users(*)').eq('team_id', appState.activeTeam.id).order('current_team_handicap', { ascending: true });
+        showLoading("正在驗證球隊資訊...");
+        try {
+            // 1. 查找球隊並檢查人數上限 (對齊 joinTeamByCode 邏輯)
+            const { data: team, error: tErr } = await supabaseClient.from('teams').select('*').eq('join_code', code).maybeSingle();
+            if (tErr || !team) throw new Error("找不到該球隊，請檢查邀請碼");
+
+            const { count: currentMemberCount } = await supabaseClient
+                .from('team_members').select('*', { count: 'exact', head: true }).eq('team_id', team.id);
+
+            if (currentMemberCount >= team.member_limit) {
+                throw new Error(`該球隊人數已達上限 (${team.member_limit}人)，請聯絡管理員。`);
+            }
+
+            // 2. 建立成員關聯
+            const { error: jErr } = await supabaseClient.from('team_members').insert({
+                team_id: team.id,
+                user_id: appState.currentUser.id,
+                role: 'member',
+                current_team_handicap: 36.0
+            });
+            if (jErr) throw jErr;
+
+            alert("成功加入球隊：" + team.name);
+            location.reload();
+        } catch (err) { alert(err.message); hideLoading(); }
+    }
+
+    async function renderHistory() {
+        showTabLoading();
+        try {
+            // [移植方案分級邏輯] 對齊 getTeamMatchHistory 邏輯
+            let query = supabaseClient.from('scores').select('*, events(*)').eq('team_member_id', appState.currentUser.memberId).order('created_at', { ascending: false });
+
+            // 若為免費版，強制限制僅能看 2 筆紀錄
+            const isFree = appState.activeTeam.subscription_type === 'free';
+            if (isFree) query = query.limit(2);
+
+            const { data: scores } = await query;
+            let stats = { birdie: 0, eagle: 0, par: 0 };
+            scores.forEach(s => { const pars = s.events.pars || Array(18).fill(4); s.hole_scores.forEach((h, i) => { if (h > 0) { const d = h - pars[i]; if (d <= -2) stats.eagle++; else if (d === -1) stats.birdie++; else if (d === 0) stats.par++; } }); });
+
+            const container = document.getElementById('page-container');
+            const tierBadge = isFree ? `<p class="text-[9px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full inline-block mb-4">💡 免費版：僅顯示最近 2 筆紀錄</p>` : "";
+
+            container.innerHTML = `${tierBadge}<div class="grid grid-cols-3 gap-3 mb-8">
+                <div class="bg-white p-4 rounded-3xl shadow-sm text-center border border-emerald-50"><p class="text-2xl font-black text-emerald-600">${stats.birdie}</p><p class="text-[9px] text-gray-400 uppercase font-black">Birdies</p></div>
+                <div class="bg-white p-4 rounded-3xl shadow-sm text-center border border-amber-50"><p class="text-2xl font-black text-amber-500">${stats.eagle}</p><p class="text-[9px] text-gray-400 uppercase font-black">Eagles+</p></div>
+                <div class="bg-white p-4 rounded-3xl shadow-sm text-center border border-blue-50"><p class="text-2xl font-black text-blue-500">${stats.par}</p><p class="text-[9px] text-gray-400 uppercase font-black">Pars</p></div>
+            </div>` + scores.map(s => `<div onclick="viewScorecard('${s.id}')" class="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 flex justify-between items-center mb-3 transition-all active:bg-gray-50"><div><p class="text-[9px] text-gray-400 font-bold mb-1">${s.events.date}</p><p class="font-bold text-gray-900">${s.events.title}</p></div><div class="text-right"><p class="text-lg font-black text-[#133B2B]">${s.gross_score}</p><p class="text-[8px] text-gray-300 font-black uppercase">Gross</p></div></div>`).join('');
+        } catch (e) { diag("❌ 載入歷史失敗"); }
+    }
+
+    async function renderMemberManagement() {
+        showTabLoading();
+        const { data: members } = await supabaseClient.from('team_members').select('*, users(*)').eq('team_id', appState.activeTeam.id);
         const container = document.getElementById('page-container');
-        container.innerHTML = `<h2 class="text-xl font-black text-[#133B2B] mb-1">球隊排行榜</h2><p class="text-[10px] text-gray-400 uppercase tracking-widest mb-6">Ranking by Handicap</p>` +
-            members.map((m, i) => `<div class="bg-white p-5 rounded-[32px] shadow-sm border border-gray-50 flex items-center mb-4"><div class="w-10 shrink-0 text-2xl font-black ${i===0?'text-amber-400':(i===1?'text-gray-400':(i===2?'text-amber-700':'text-gray-300'))}">${i+1}</div><div class="flex-1 ml-2"><h4 class="font-bold text-gray-900">${m.users.real_name}</h4><p class="text-[9px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-full inline-block mt-1">${m.role}</p></div><div class="text-right"><p class="text-[9px] text-gray-300 font-black uppercase">Handicap</p><p class="text-2xl font-black text-[#133B2B]">${m.current_team_handicap}</p></div></div>`).join('');
+        container.innerHTML = `<button onclick="switchTab(3)" class="text-[10px] text-gray-400 mb-6 font-black uppercase tracking-widest flex items-center">◀ 返回管理</button>` +
+            members.map(m => `
+                <div class="bg-white p-5 rounded-3xl mb-3 shadow-sm border border-gray-50">
+                    <div class="flex justify-between items-start mb-4">
+                        <div><h4 class="font-black text-gray-800">${m.users.real_name}</h4><p class="text-[9px] text-emerald-600 font-bold uppercase mt-0.5">${m.role} | HCP: ${m.current_team_handicap}</p></div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="editHC('${m.id}', ${m.current_team_handicap})" class="bg-gray-50 text-gray-600 py-2 rounded-xl text-[10px] font-black">改差點</button>
+                        <button onclick="changeRole('${m.id}', '${m.role}')" class="bg-gray-50 text-gray-600 py-2 rounded-xl text-[10px] font-black">換職務</button>
+                        <button onclick="deleteMember('${m.id}','${m.users.real_name}')" class="bg-rose-50 text-rose-500 py-2 rounded-xl text-[10px] font-black">移除</button>
+                    </div>
+                </div>`).join('');
+    }
+
+    async function changeRole(mId, currentRole) {
+        const newRole = prompt("變更職務 (president/admin/member):", currentRole);
+        if (newRole && ['president', 'admin', 'member'].includes(newRole)) {
+            showLoading("更新職務中...");
+            await supabaseClient.from('team_members').update({ role: newRole }).eq('id', mId);
+            renderMemberManagement();
+        } else if (newRole) {
+            alert("無效的角色名稱");
+        }
+    }
+
+    // --- 7. [LeaderboardTab.kt] 球隊差點排行 100% 轉譯 ---
+    async function renderLeaderboard() {
+        showTabLoading();
+        try {
+            const { data: members } = await supabaseClient.from('team_members').select('*, users(*)').eq('team_id', appState.activeTeam.id).order('current_team_handicap', { ascending: true });
+
+            const container = document.getElementById('page-container');
+            container.innerHTML = `<h2 class="text-xl font-black text-[#133B2B] mb-1">球隊排行榜</h2><p class="text-[10px] text-gray-400 uppercase tracking-widest mb-6">Ranking by Handicap</p>` +
+                members.map((m, i) => {
+                    // [移植職稱轉換邏輯]
+                    const roleMap = { 'president':'會長', 'vice_president':'副會長', 'admin':'總幹事', 'vice_admin':'副總幹事', 'member':'隊員', 'guest':'來賓' };
+                    const roleName = roleMap[m.role] || '成員';
+
+                    // [移植前三名勳章 UI]
+                    const rankColor = i === 0 ? 'text-amber-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-700' : 'text-gray-300';
+                    const medal = i < 3 ? '🏆' : '';
+
+                    return `<div class="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 flex items-center mb-4 transition-all active:scale-95">
+                        <div class="w-10 shrink-0 text-2xl font-black ${rankColor}">${i+1}</div>
+                        <div class="flex-1 ml-2">
+                            <h4 class="font-bold text-gray-900">${m.users.real_name} ${medal}</h4>
+                            <p class="text-[9px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-full inline-block mt-1 font-bold uppercase">${roleName}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[9px] text-gray-300 font-black uppercase">Handicap</p>
+                            <p class="text-2xl font-black text-[#133B2B]">${m.current_team_handicap}</p>
+                        </div>
+                    </div>`;
+                }).join('');
+        } catch (e) { diag("❌ 載入排行失敗"); }
+    }
+
+    // --- [EventLeaderboardScreen.kt] 專業賽事排行 100% 轉譯 ---
+    async function renderEventLeaderboard(eventId) {
+        showTabLoading();
+        try {
+            const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+            const { data: scores } = await supabaseClient.from('scores').select('*, team_members(users(*))').eq('event_id', eventId);
+            const pars = event.pars || Array(18).fill(4);
+
+            // [核心排序算法轉譯]
+            const sorted = scores.map(s => {
+                let toPar = 0; s.hole_scores.forEach((score, i) => { if (score > 0) toPar += (score - pars[i]); });
+                const holes = s.hole_scores.filter(h => h > 0).length;
+                return { ...s, holesPlayed: holes, isFinished: holes === 18, toPar };
+            }).sort((a, b) => {
+                if (a.isFinished !== b.isFinished) return a.isFinished ? -1 : 1; // 完賽者優先
+                return a.isFinished ? a.gross_score - b.gross_score : a.toPar - b.toPar; // 完賽比總桿, 未完賽比 To Par
+            });
+
+            const container = document.getElementById('page-container');
+            container.innerHTML = `<div class="bg-[#133B2B] p-6 rounded-[40px] text-white mb-6 shadow-xl relative overflow-hidden">
+                <p class="text-[10px] opacity-60 uppercase tracking-widest mb-1">Live Leaderboard</p>
+                <h3 class="text-xl font-black">${event.title}</h3>
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-white/5 rounded-full"></div>
+            </div>` + sorted.map((s, i) => {
+                // [移植 To Par 格式化邏輯]
+                const toParText = s.toPar === 0 ? "E" : (s.toPar > 0 ? `+${s.toPar}` : s.toPar);
+                const toParColor = s.toPar < 0 ? 'text-amber-500' : (s.toPar > 0 ? 'text-rose-500' : 'text-emerald-500');
+
+                return `<div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-50 flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-4">
+                        <span class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-[10px] font-black text-gray-300">${i + 1}</span>
+                        <div><p class="font-bold text-gray-800">${s.team_members.users.real_name}</p><p class="text-[9px] text-gray-400 uppercase">Holes: ${s.holesPlayed} ${s.isFinished?'(F)':''}</p></div>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <div class="text-right"><p class="text-xs font-black ${toParColor}">${toParText}</p><p class="text-[7px] text-gray-300 font-bold uppercase">To Par</p></div>
+                        <div class="text-right border-l border-gray-100 pl-4"><p class="text-xl font-black text-[#133B2B]">${s.gross_score}</p><p class="text-[7px] text-gray-400 font-bold uppercase">Gross</p></div>
+                    </div>
+                </div>`;
+            }).join('') + `<button onclick="switchTab(0)" class="w-full py-6 text-gray-400 text-[10px] font-black uppercase tracking-widest">返回賽事行程</button>`;
+        } catch (err) { diag("❌ 排行榜載入失敗"); }
     }
 
     async function renderHistory() {
@@ -239,14 +488,6 @@
         let adminSec = isAdmin ? `<div class="mt-8 border-t pt-8"><h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">管理員專區</h4><button onclick="renderMemberManagement()" class="w-full bg-white border border-gray-200 p-4 rounded-3xl font-black text-sm mb-4 shadow-sm active:bg-gray-50 transition-all">成員與差點管理</button></div>` : "";
         document.getElementById('page-container').innerHTML = `<div class="bg-[#133B2B] p-8 rounded-[40px] text-white shadow-2xl mb-8 relative overflow-hidden"><div class="relative z-10"><h3 class="text-2xl font-black mb-1">${team.name}</h3><p class="text-[10px] opacity-60 uppercase tracking-widest">邀請碼: <span class="text-amber-400 font-mono">${team.join_code}</span></p></div><div class="absolute -right-8 -bottom-8 w-32 h-32 bg-white/5 rounded-full"></div></div><div class="bg-white p-8 rounded-[40px] border border-gray-100 text-center shadow-sm"><p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-6">加入新球隊</p><div class="flex space-x-2"><input id="join-code" class="flex-1 bg-gray-50 border-none rounded-2xl p-4 text-center font-black text-xl tracking-[0.5em] focus:ring-2 focus:ring-[#133B2B]" placeholder="000000"><button onclick="joinTeam()" class="bg-[#133B2B] text-white px-8 rounded-2xl font-black shadow-lg">加入</button></div></div>${adminSec}`;
     }
-    async function renderMemberManagement() {
-        showTabLoading(); const { data: members } = await supabaseClient.from('team_members').select('*, users(*)').eq('team_id', appState.activeTeam.id);
-        const container = document.getElementById('page-container');
-        container.innerHTML = `<button onclick="switchTab(3)" class="text-[10px] text-gray-400 mb-6 font-black uppercase tracking-widest flex items-center">◀ 返回管理</button>` +
-            members.map(m => `<div class="bg-white p-5 rounded-3xl flex justify-between items-center mb-3 shadow-sm border border-gray-50"><div class="flex-1"><div><h4 class="font-black text-gray-800">${m.users.real_name}</h4><p class="text-[9px] text-gray-400 font-bold uppercase mt-0.5">${m.role} | HCP: ${m.current_team_handicap}</p></div></div><div class="flex space-x-2"><button onclick="editHC('${m.id}', ${m.current_team_handicap})" class="bg-emerald-50 text-emerald-700 px-3 py-2 rounded-xl text-[10px] font-black">改差點</button><button onclick="deleteMember('${m.id}','${m.users.real_name}')" class="bg-rose-50 text-rose-500 px-3 py-2 rounded-xl text-[10px] font-black">移除</button></div></div>`).join('');
-    }
-    async function editHC(id, old) { const val = prompt("輸入新差點:", old); if(val) { await supabaseClient.from('team_members').update({current_team_handicap: parseFloat(val)}).eq('id', id); renderMemberManagement(); } }
-    async function deleteMember(id, name) { if(confirm(`確定移除 ${name}?`)) { await supabaseClient.from('team_members').delete().eq('id', id); renderMemberManagement(); } }
 
     // --- 10. 使用說明 ---
     function renderInstructions() {
@@ -268,6 +509,39 @@
     async function refreshRole(){ const {data:m} = await supabaseClient.from('team_members').select('*').eq('user_id',appState.currentUser.id).eq('team_id',appState.activeTeam.id).single(); appState.currentUser.role=m.role; appState.currentUser.memberId=m.id; }
     function updateTabUI(idx) { document.querySelectorAll('.nav-item').forEach((it, i) => { const ind = it.querySelector('.tab-indicator'); if(i===idx){ it.classList.add('active-tab'); ind.classList.remove('hidden'); }else{ it.classList.remove('active-tab'); ind.classList.add('hidden'); } }); }
     function renderProfileSetup() { hideLoading(); document.getElementById('page-container').innerHTML = `<div class="bg-white p-12 rounded-[40px] text-center shadow-sm"><h3>請完成設定</h3><button onclick="location.reload()" class="mt-8 px-10 py-4 bg-[#133B2B] text-white rounded-2xl font-black shadow-lg">開始初始化</button></div>`; }
+
+    async function showParticipants(eventId) {
+        showModal(`<div class="p-10 text-center animate-spin rounded-full h-8 w-8 border-b-2 border-[#133B2B] mx-auto"></div>`);
+        const { data: regs } = await supabaseClient.from('event_registrations').select('*, team_members(users(real_name), current_team_handicap)').eq('event_id', eventId);
+        const list = regs.map((r, i) => `<div class="flex justify-between items-center p-4 bg-gray-50 rounded-2xl mb-2"><span class="font-black text-gray-800">${i+1}. ${r.team_members.users.real_name}</span><span class="text-[10px] bg-white px-2 py-1 rounded-lg border border-gray-100 font-bold">HC: ${r.team_members.current_team_handicap}</span></div>`).join('');
+
+        // [移植一鍵複製 LINE 格式]
+        const { data: event } = await supabaseClient.from('events').select('*').eq('id', eventId).single();
+        window.copyToLine = () => {
+            const txt = `⛳ 【${event.title}】參賽名單\n📅 日期: ${event.date}\n📍 地點: ${event.location}\n\n` + regs.map((r, i) => `${i + 1}. ${r.team_members.users.real_name}`).join('\n') + `\n\n👥 總計: ${regs.length} 人`;
+            navigator.clipboard.writeText(txt).then(() => alert("已複製！"));
+        };
+
+        showModal(`<div class="p-6"><h3 class="font-black text-xl mb-4 text-[#133B2B]">參賽名單 (${regs.length})</h3><button onclick="copyToLine()" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm mb-4">📋 複製報名清單 (LINE)</button><div class="max-h-60 overflow-y-auto no-scrollbar">${list || '無人報名'}</div><button onclick="closeModal()" class="w-full mt-4 py-4 bg-gray-100 rounded-2xl font-bold">關閉</button></div>`);
+    }
+
+    function showGuestDialog(eventId) {
+        showModal(`<div class="p-6 space-y-4"><h3 class="font-black text-xl text-[#133B2B]">來賓報名</h3><p class="text-xs text-gray-400">幫朋友卡位，系統會自動建立虛擬帳號。</p><input id="g-name" class="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-[#133B2B]" placeholder="姓名"><input id="g-hc" type="number" class="w-full p-4 bg-gray-50 rounded-2xl border-none" value="36"><button onclick="doGuestReg('${eventId}')" class="w-full py-4 bg-amber-500 text-white rounded-2xl font-black shadow-lg">確認報名</button><button onclick="closeModal()" class="w-full text-gray-400 text-sm">取消</button></div>`);
+    }
+
+    async function doGuestReg(eventId) {
+        const name = document.getElementById('g-name').value;
+        const hc = parseFloat(document.getElementById('g-hc').value) || 36;
+        if (!name) return alert("請輸入姓名");
+        closeModal(); showLoading("建立帳號中...");
+        try {
+            const { data: u } = await supabaseClient.from('users').insert({ line_uid: `GUEST_${Date.now()}`, real_name: name, initial_handicap: hc }).select().single();
+            const { data: m } = await supabaseClient.from('team_members').insert({ team_id: appState.activeTeam.id, user_id: u.id, role: 'guest', current_team_handicap: hc, sponsor_member_id: appState.currentUser.memberId }).select().single();
+            await supabaseClient.from('event_registrations').insert({ event_id: eventId, team_member_id: m.id });
+            alert("成功幫來賓報名！"); renderEvents();
+        } catch (e) { alert("失敗: " + e.message); hideLoading(); }
+    }
+
     window.addEventListener('load', initApp);
 </script>
 </body>
