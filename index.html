@@ -265,8 +265,14 @@
         const container = document.getElementById('page-container');
         container.innerHTML = '';
         container.className = "p-4 space-y-4 fade-in";
-        if (state.activeTeam) document.getElementById('header-title').innerText = state.activeTeam.name;
-        else if (index !== 3) { switchTab(3); return; }
+
+        // [核心修正] 頂部標題永遠顯示球隊名稱，絕不顯示功能名稱
+        if (state.activeTeam) {
+            document.getElementById('header-title').innerText = state.activeTeam.name;
+        } else if (index !== 3) {
+            switchTab(3); return;
+        }
+
         switch(index) {
             case 0: renderEvents(); break;
             case 1: renderLeaderboard(); break;
@@ -277,7 +283,6 @@
     }
 
     async function renderEvents() {
-        document.getElementById('header-title').innerText = "賽事行程";
         const container = document.getElementById('page-container');
         container.innerHTML = `<div id="event-loading" class="flex flex-col items-center py-20 text-gray-400"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300 mb-2"></div><p class="text-xs">同步行程中...</p></div><div id="event-list" class="space-y-4"></div>`;
         await fetchTournaments();
@@ -320,7 +325,7 @@
 
     async function renderLeaderboard(targetEventId = null) {
         if (targetEventId) { renderEventLeaderboard(targetEventId); return; }
-        document.getElementById('header-title').innerText = "球隊排行榜"; showLoading("正在更新球隊排名...");
+        showLoading("正在更新球隊排名...");
         try {
             const { data: members } = await supabaseClient.from('team_members').select('*, users(*)').eq('team_id', state.activeTeam.id).order('current_team_handicap', { ascending: true });
             hideLoading(); const container = document.getElementById('page-container');
@@ -348,7 +353,7 @@
     }
 
     async function renderHistory() {
-        document.getElementById('header-title').innerText = "歷史成績"; showLoading("統計中...");
+        showLoading("統計中...");
         try {
             const { data: scores } = await supabaseClient.from('scores').select('*, events(*)').eq('team_member_id', state.myMemberId).order('created_at', { ascending: false });
             hideLoading(); const container = document.getElementById('page-container');
