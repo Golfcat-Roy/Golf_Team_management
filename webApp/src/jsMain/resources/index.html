@@ -165,6 +165,22 @@
         return r === "admin" || r === "president" || r === "vice_president" || r === "vice_admin";
     }
 
+    // --- 初始化 ---
+    async function initApp() {
+        try {
+            await liff.init({ liffId: "2010382913-rCaKoQcE" });
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+            state.userProfile = await liff.getProfile();
+            await syncUserData();
+        } catch (err) {
+            console.error("Init failed", err);
+            document.getElementById('loading-screen').innerHTML = `<p class='text-red-500'>連線失敗: ${err.message}</p>`;
+        }
+    }
+
     // --- 資料同步 (對齊 App.kt 攔截邏輯) ---
     async function syncUserData() {
         const { data: user, error } = await supabaseClient
