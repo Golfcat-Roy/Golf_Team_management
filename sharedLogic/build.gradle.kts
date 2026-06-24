@@ -23,12 +23,22 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies {
-            implementation(libs.kotlinx.datetime)
-        }
+        sourceSets {
+            commonMain.dependencies {
+                implementation(libs.kotlinx.datetime)
 
-        androidMain.dependencies {
-            // 如果原本有 Android 專屬依賴再放這
+                // 💡 1. 補回 Kotlin 協程 (Coroutines)
+                implementation(libs.kotlinx.coroutines.core)
+
+                // 💡 2. 補回 Supabase 相關模組
+                implementation(libs.supabase.postgrest) // 資料庫查詢用
+                implementation(libs.supabase.auth)      // 身份驗證用 (有些舊版可能叫 gotrue)
+
+                // 💡 3. 如果你的 Supabase 還有用到其他模組 (例如 Ktor client 或 Serialization)，也要一併加回來
+                implementation(libs.ktor.client.core)
+            }
+            // ...
+        }
         }
     }
 }
