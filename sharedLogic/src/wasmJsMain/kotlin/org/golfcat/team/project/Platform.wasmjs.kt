@@ -14,6 +14,7 @@ private fun isLiffAvailable(): Boolean = js("typeof window.liff !== 'undefined'"
 private fun isLiffLoggedIn(): Boolean = js("window.liff.isLoggedIn()")
 private fun getLiffUserIdAsync(): Promise<JsString> = js("window.liff.getProfile().then(p => p.userId)")
 
+
 class WasmPlatformService : PlatformService {
     override suspend fun getLineUserId(): String? {
         return try {

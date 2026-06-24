@@ -26,6 +26,7 @@ actual suspend fun loginWithLine(): User? {
         return null
     }
 
+
     return try {
         val profile = getLiffProfile().await<LiffProfile>()
         User(
