@@ -15,11 +15,15 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Build with Gradle
         run: |
           chmod +x gradlew
-          ./gradlew clean :webApp:jsBrowserDistribution --no-daemon --no-configuration-cache --no-build-cache --stacktrace -Pkotlin.incremental=false
+          # 💡 修改 1：將 jsBrowserDistribution 改為 wasmJsBrowserDistribution
+          ./gradlew clean :webApp:wasmJsBrowserDistribution --no-daemon --no-configuration-cache --no-build-cache --stacktrace -Pkotlin.incremental=false
+
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: webApp/build/dist/js/productionExecutable
+          # 💡 修改 2：將輸出資料夾的 js 改為 wasmJs
+          folder: webApp/build/dist/wasmJs/productionExecutable
           branch: gh-pages
