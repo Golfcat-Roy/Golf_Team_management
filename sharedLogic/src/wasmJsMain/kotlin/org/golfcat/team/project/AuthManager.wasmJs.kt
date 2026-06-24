@@ -30,7 +30,7 @@ actual suspend fun loginWithLine(): User? {
 
     return try {
         // 💡 3. 安全地等待 JavaScript Promise 完成，並取得我們定義好的 LiffProfile
-        val profile = getLiffProfile().await()
+        val profile = getLiffProfile().await<LiffProfile>()
 
         User(
             // 💡 4. 將 Wasm 的 JsString 轉換回 Kotlin 原生的 String

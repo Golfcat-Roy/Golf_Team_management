@@ -23,7 +23,7 @@ class WasmPlatformService : PlatformService {
             // 💡 3. 安全地檢查 LIFF 狀態
             if (isLiffAvailable() && isLiffLoggedIn()) {
                 // 💡 4. 等待 Promise 完成，並將 JsString 轉回 Kotlin 的 String
-                getLiffUserIdAsync().await().toString()
+                getLiffUserIdAsync().await<JsString>().toString()
             } else {
                 null
             }
