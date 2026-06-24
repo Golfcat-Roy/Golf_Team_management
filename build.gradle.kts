@@ -8,10 +8,3 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.kotlinx.serialization) apply false
 }
-
-allprojects {
-    configurations.all {
-        // 強制使用 0.4.1，這是目前 KMP Web 最穩定的日期函式庫版本
-        resolutionStrategy.force("org.jetbrains.kotlinx:kotlinx-datetime:0.4.1")
-    }
-}

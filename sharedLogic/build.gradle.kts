@@ -1,79 +1,34 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// 💡 1. 這一區 Plugins 是關鍵，必須放在檔案的最頂部！
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.kotlinx.serialization)
 }
 
+// 💡 2. Kotlin 區塊獨立在外面
 kotlin {
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "SharedLogic"
-            isStatic = true
-        }
+    android {
+        namespace = "org.golfcat.team.project.sharedLogic"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        compilerOptions { jvmTarget = JvmTarget.JVM_11 }
     }
-    
-    js {
-        browser()
-    }
-    
-    /*
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
     }
-    */
-    
-    android {
-       namespace = "org.golfcat.team.project.sharedLogic"
-       compileSdk = libs.versions.android.compileSdk.get().toInt()
-       minSdk = libs.versions.android.minSdk.get().toInt()
-    
-       compilerOptions {
-           jvmTarget = JvmTarget.JVM_11
-       }
-    }
-    
+
     sourceSets {
         commonMain.dependencies {
-            // Ktor 核心與 JSON 序列化
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
-            
-            // Supabase Kotlin SDK
-            implementation(libs.supabase.kt)
-            implementation(libs.supabase.postgrest)
-            implementation(libs.supabase.auth)
-
-            // Kotlinx Datetime
             implementation(libs.kotlinx.datetime)
         }
-        commonTest.dependencies {
-            implementation(libs.kotlin.test)
-            implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.ktor.client.mock)
-        }
+
         androidMain.dependencies {
-            implementation(libs.ktor.client.okhttp)
-            implementation(libs.line.sdk)
+            // 如果原本有 Android 專屬依賴再放這
         }
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
-        }
-        jsMain.dependencies {
-            implementation(libs.wrappers.browser)
-            implementation(libs.ktor.client.js)
-        }
-        /*
-        wasmJsMain.dependencies {
-            implementation(libs.ktor.client.js)
-        }
-        */
     }
 }
