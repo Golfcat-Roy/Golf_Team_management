@@ -158,29 +158,14 @@
         }
     };
 
-    // --- 工具函式 ---
+    // --- 工具函式 (100% 對齊 MemberRoles.kt) ---
     function isAdmin() {
         const r = state.myRole;
+        // 包含會長、副會長、總幹事、副總幹事
         return r === "admin" || r === "president" || r === "vice_president" || r === "vice_admin";
     }
 
-    // --- 初始化 ---
-    async function initApp() {
-        try {
-            await liff.init({ liffId: "2010382913-rCaKoQcE" });
-            if (!liff.isLoggedIn()) {
-                liff.login();
-                return;
-            }
-            state.userProfile = await liff.getProfile();
-            await syncUserData();
-        } catch (err) {
-            console.error("Init failed", err);
-            document.getElementById('loading-screen').innerHTML = `<p class='text-red-500'>連線失敗: ${err.message}</p>`;
-        }
-    }
-
-    // --- 資料同步 (對齊 sharedLogic) ---
+    // --- 資料同步 (對齊 App.kt 攔截邏輯) ---
     async function syncUserData() {
         const { data: user, error } = await supabaseClient
             .from('users')
@@ -190,7 +175,8 @@
 
         if (error) throw error;
 
-        if (!user) {
+        // 邏輯 1: 沒資料或名字是預設值 ➔ 強制導向設定頁面
+        if (!user || user.real_name === "User") {
             renderProfileSetup();
             return;
         }
@@ -208,6 +194,10 @@
             state.activeTeam = state.myTeams[0];
             state.myMemberId = members[0].id;
             state.myRole = members[0].role;
+        } else {
+            // 邏輯 2: 沒加入球隊也視為資料不全 (與 App 版 hasTeams == false 一致)
+            renderProfileSetup();
+            return;
         }
 
         hideLoading();
@@ -509,18 +499,26 @@
     async function fetchTournaments() {
         if (!state.activeTeam) return;
         try {
-            // 1. 撈取目前球隊的球賽
-            const { data: events, error } = await supabaseClient
+            // 1. 撈取目前球隊的所有非隱藏賽事
+            const { data: allEvents, error } = await supabaseClient
                 .from('events')
                 .select('*')
                 .eq('team_id', state.activeTeam.id)
-                .order('date', { ascending: false });
+                .eq('is_archived_in_list', false);
 
             if (error) throw error;
 
-            // 2. 獲取我在該球隊的 memberId
-            const memberId = state.myMemberId;
+            // 2. [100% 移植 App 排序邏輯]
+            const sortedEvents = allEvents.sort((a, b) => {
+                const statusA = a.registration_status === "closed";
+                const statusB = b.registration_status === "closed";
+                if (statusA !== statusB) return statusA ? -1 : 1; // Closed 先排
+                if (statusA) return b.date.localeCompare(a.date); // Closed 的日期 DESC
+                return a.date.localeCompare(b.date); // Open/Started 的日期 ASC (最近的在前面)
+            });
 
+            // 3. 獲取報名狀態
+            const memberId = state.myMemberId;
             const { data: myRegs } = await supabaseClient
                 .from('event_registrations')
                 .select('event_id')
@@ -532,12 +530,13 @@
             document.getElementById('event-loading').classList.add('hidden');
             listContainer.innerHTML = '';
 
-            if (!events || events.length === 0) {
+            if (sortedEvents.length === 0) {
                 listContainer.innerHTML = `<div class='text-center py-20 text-gray-400'>目前無任何排定賽事</div>`;
                 return;
             }
 
-            events.forEach(event => {
+            sortedEvents.forEach(event => {
+                // ... (其餘渲染邏輯與之前相同，但順序已改變)
                 const isRegistered = registeredIds.has(event.id);
                 const isStarted = event.registration_status === 'started';
                 const isClosed = event.registration_status === 'closed';
@@ -1093,6 +1092,9 @@
         const list = document.getElementById('player-scoring-list');
         state.scoring.players.forEach((player, index) => {
             const currentScore = state.scoring.playerScores[player.id][state.scoring.currentHole - 1];
+
+            // [100% 移植 App 鎖定邏輯]
+            // 規則: 對抗賽 (Match Play) 下，只有 index 0 的球員 (組長) 擁有編輯權限
             const isLocked = state.scoring.isMatchPlay && index > 0;
 
             const card = document.createElement('div');
@@ -1101,16 +1103,22 @@
                 <div class="flex-1">
                     <h4 class="font-bold text-gray-900 text-lg leading-tight">${player.users.real_name}</h4>
                     <div class="flex items-center space-x-2 mt-1">
-                        <span class="text-[10px] text-gray-400">總桿: ${state.scoring.playerScores[player.id].reduce((a,b)=>a+b, 0)}</span>
-                        ${isLocked ? '<span class="text-[9px] bg-gray-200 text-gray-500 px-1.5 rounded">組員代表計分</span>' : ''}
+                        <span class="text-[100% 移植] text-[10px] text-gray-400">總桿: ${state.scoring.playerScores[player.id].reduce((a,b)=>a+b, 0)}</span>
+                        ${isLocked ? '<span class="text-[9px] bg-gray-200 text-gray-500 px-1.5 rounded font-bold">由隊友代表計分</span>' : ''}
                     </div>
                 </div>
                 <div class="flex items-center space-x-3">
-                    <button onclick="${isLocked ? '' : `updateHoleScore('${player.id}', -1)`}" class="w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl font-light text-gray-400 ${isLocked ? 'cursor-not-allowed' : 'active:bg-emerald-50 active:text-emerald-700'}">–</button>
+                    <button onclick="${isLocked ? '' : `updateHoleScore('${player.id}', -1)`}"
+                            class="w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl font-light text-gray-400
+                            ${isLocked ? 'cursor-not-allowed' : 'active:bg-emerald-50 active:text-emerald-700'}">–</button>
+
                     <div class="w-14 h-12 bg-white border-2 ${currentScore > 0 ? 'border-[#04432C]' : 'border-gray-200'} rounded-xl flex items-center justify-center font-black text-xl ${currentScore > 0 ? 'text-[#04432C]' : 'text-gray-300'}">
                         ${currentScore === 0 ? '-' : currentScore}
                     </div>
-                    <button onclick="${isLocked ? '' : `updateHoleScore('${player.id}', 1)`}" class="w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl font-light text-gray-400 ${isLocked ? 'cursor-not-allowed' : 'active:bg-emerald-50 active:text-emerald-700'}">+</button>
+
+                    <button onclick="${isLocked ? '' : `updateHoleScore('${player.id}', 1)`}"
+                            class="w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-2xl font-light text-gray-400
+                            ${isLocked ? 'cursor-not-allowed' : 'active:bg-emerald-50 active:text-emerald-700'}">+</button>
                 </div>
             `;
             list.appendChild(card);
