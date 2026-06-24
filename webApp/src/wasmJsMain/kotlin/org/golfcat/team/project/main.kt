@@ -1,20 +1,19 @@
 package org.golfcat.team.project
 
+// 💡 確保 Compose Web 的 Window 啟動器有被正確匯入
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.CanvasBasedWindow
 
-// 💡 這裡必須匯入你 sharedUI 裡面真正的「UI 進入點」函數
-// 從你剛才的編譯日誌看來，你的主畫面應該是 MainAppShell
-import org.golfcat.team.project.ui.screens.MainAppShell
+// 💡 因為 App() 通常就定義在 org.golfcat.team.project 這個 package 底下，
+// 所以通常不需要額外 import，直接呼叫即可！
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    // CanvasBasedWindow 是 Wasm 網頁版的專屬容器
     CanvasBasedWindow(
         title = "Golf Team Management",
-        canvasElementId = "ComposeTarget" // 這個 ID 必須跟你網頁 index.html 裡的 canvas id 一致
+        canvasElementId = "ComposeTarget" // 請確認 index.html 裡的 canvas id 也是這個
     ) {
-        // 在這裡呼叫你的主畫面
-        MainAppShell()
+        // 💡 呼叫我們剛剛找到的真正起點
+        App()
     }
 }
