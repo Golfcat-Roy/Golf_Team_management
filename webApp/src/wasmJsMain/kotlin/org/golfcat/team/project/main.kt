@@ -1,17 +1,19 @@
 package org.golfcat.team.project
 
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.window.CanvasBasedWindow
+import androidx.compose.ui.window.ComposeViewport
+import kotlinx.browser.document
 
-// 這裡不需要 import renderComposable，那是給純網頁開發用的
+// 💡 如果 App() 還是亮紅燈，請把前面的註解拿掉，或是用 Alt+Enter 匯入
+// import org.golfcat.team.project.ui.screens.App
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    CanvasBasedWindow(
-        title = "Golf Team Management",
-        canvasElementId = "ComposeTarget" // 這個 ID 會對應到 index.html 的 canvas
-    ) {
-        // 呼叫你的主畫面起點
+    // 取得網頁的 body 元素
+    val body = document.body ?: return
+
+    // 💡 拋棄找不到的 CanvasBasedWindow，改用最新標準的 ComposeViewport
+    ComposeViewport(body) {
         App()
     }
 }
