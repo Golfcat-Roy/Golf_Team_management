@@ -1,19 +1,17 @@
 package org.golfcat.team.project
 
-// 💡 確保 Compose Web 的 Window 啟動器有被正確匯入
 import androidx.compose.ui.ExperimentalComposeUiApi
-import org.golfcat.team.project.App
-import androidx.compose.web.renderComposable
-// 💡 因為 App() 通常就定義在 org.golfcat.team.project 這個 package 底下，
-// 所以通常不需要額外 import，直接呼叫即可！
+import androidx.compose.ui.window.CanvasBasedWindow
+
+// 這裡不需要 import renderComposable，那是給純網頁開發用的
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    ComposeEntryPoint(
+    CanvasBasedWindow(
         title = "Golf Team Management",
-        canvasElementId = "ComposeTarget" // 請確認 index.html 裡的 canvas id 也是這個
+        canvasElementId = "ComposeTarget" // 這個 ID 會對應到 index.html 的 canvas
     ) {
-        // 💡 呼叫我們剛剛找到的真正起點
+        // 呼叫你的主畫面起點
         App()
     }
 }
