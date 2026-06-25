@@ -10,8 +10,8 @@ plugins {
 kotlin {
     android {
         namespace = "org.golfcat.team.project.sharedLogic"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        compileSdk = 37
+        minSdk = 24
         compilerOptions { jvmTarget = JvmTarget.JVM_11 }
     }
 
@@ -22,10 +22,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // 基礎與日期
+            implementation(kotlin("stdlib")) // 💡 強制引入標準庫，解決 Symbol for Any not found
             implementation(libs.kotlinx.datetime)
-
-            // 💡 剛才補回來的協程與 Supabase
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
@@ -33,7 +31,14 @@ kotlin {
         }
 
         androidMain.dependencies {
-            // Android 專屬邏輯庫
+        }
+
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(libs.kotlinx.datetime)
+                implementation(libs.ktor.client.js)
+                implementation(libs.wrappers.browser)
+            }
         }
     }
 }

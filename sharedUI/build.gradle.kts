@@ -1,7 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// 💡 1. 頂部必須要有 Plugins 區塊
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
@@ -9,16 +8,14 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
-// 💡 2. 獨立的 Kotlin 區塊
 kotlin {
     android {
         namespace = "org.golfcat.team.project.sharedUI"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        compileSdk = 37
+        minSdk = 24
         compilerOptions { jvmTarget = JvmTarget.JVM_11 }
     }
 
-    // 💡 Wasm 支援
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
@@ -36,13 +33,14 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.kotlinx.datetime)
         }
-        androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
+        val androidMain by getting {
+            dependencies {
+                implementation(libs.compose.uiToolingPreview)
+            }
         }
     }
 }
 
-// 💡 3. 最底部的 dependencies
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
