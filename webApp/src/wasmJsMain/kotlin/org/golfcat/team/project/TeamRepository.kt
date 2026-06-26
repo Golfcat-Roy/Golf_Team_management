@@ -19,23 +19,15 @@ class TeamRepository {
             participantCount = 12, 
             isUserRegistered = false, 
             isArchivedInList = false
-        ),
-        EventWithDetails(
-            id = "e2", 
-            title = "Monthly Match - July", 
-            date = "2024-07-15", 
-            location = "Sunrise Golf Club", 
-            registrationStatus = "open", 
-            handicapRule = "Fixed_HCP", 
-            startTime = "07:00", 
-            groupCount = 0, 
-            participantCount = 5, 
-            isUserRegistered = true, 
-            isArchivedInList = false
         )
     ))
     
     val events: StateFlow<List<EventWithDetails>> = _events.asStateFlow()
+
+    // 💡 Mock Score Data
+    private val mockScores = mutableMapOf<String, List<Int>>(
+        "u1" to List(18) { 4 } // Default 18 holes of Par 4
+    )
 
     suspend fun toggleRegistration(eventId: String) {
         val currentList = _events.value
@@ -46,6 +38,20 @@ class TeamRepository {
                     participantCount = if (event.isUserRegistered) event.participantCount - 1 else event.participantCount + 1
                 )
             } else event
+        }
+    }
+
+    suspend fun getEventPars(eventId: String): List<Int> = List(18) { 4 }
+
+    suspend fun getMemberScore(eventId: String, memberId: String): List<Int> {
+        return mockScores[memberId] ?: List(18) { 0 }
+    }
+
+    suspend fun updateHoleScore(eventId: String, memberId: String, holeIndex: Int, score: Int) {
+        val currentHoles = (mockScores[memberId] ?: List(18) { 0 }).toMutableList()
+        if (holeIndex in 0 until 18) {
+            currentHoles[holeIndex] = score
+            mockScores[memberId] = currentHoles
         }
     }
 }

@@ -23,3 +23,26 @@ data class EventWithDetails(
     val isUserRegistered: Boolean,
     val isArchivedInList: Boolean
 )
+
+data class Score(
+    val id: String? = null,
+    val eventId: String,
+    val teamMemberId: String,
+    val grossScore: Int,
+    val netScore: Double? = null,
+    val appliedHandicap: Double? = null,
+    val holeScores: List<Int>,
+    val createdAt: String? = null
+)
+
+data class MemberWithUser(
+    val id: String,
+    val teamId: String,
+    val handicap: Double,
+    val role: String,
+    val users: User,
+    val sponsorMemberId: String? = null,
+    val groupNumber: Int? = null,
+    val groupSide: String? = null,
+    val pairedGroupName: String? = null
+)

@@ -8,14 +8,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppShell() {
     var selectedTab by remember { mutableStateOf(0) }
-    // 💡 實例化 Repository 供各分頁使用
     val repository = remember { TeamRepository() }
+    val currentUser by AuthManager.currentUser.collectAsState()
+    
+    // 💡 Sub-navigation state
+    var activeScoringEventId by remember { mutableStateOf<String?>(null) }
     
     val tabs = listOf(
         TabData(ResStrings.TAB_EVENTS, Icons.Default.DateRange),
@@ -25,34 +27,44 @@ fun MainAppShell() {
         TabData(ResStrings.TAB_GUIDE, Icons.Default.Info)
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(ResStrings.APP_NAME) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title) },
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index }
+    if (activeScoringEventId != null && currentUser != null) {
+        ScoringScreen(
+            eventId = activeScoringEventId!!,
+            memberId = currentUser!!.id!!,
+            repository = repository,
+            onBack = { activeScoringEventId = null }
+        )
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(ResStrings.APP_NAME) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                )
+            },
+            bottomBar = {
+                NavigationBar {
+                    tabs.forEachIndexed { index, tab ->
+                        NavigationBarItem(
+                            icon = { Icon(tab.icon, contentDescription = tab.title) },
+                            label = { Text(tab.title) },
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index }
+                        )
+                    }
                 }
             }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            when (selectedTab) {
-                // 💡 使用真實的 EventListTab
-                0 -> EventListTab(repository)
-                else -> PlaceholderTab(tabs[selectedTab].title)
+        ) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> EventListTab(repository = repository, onScoringClick = { eventId ->
+                        activeScoringEventId = eventId
+                    })
+                    else -> PlaceholderTab(tabs[selectedTab].title)
+                }
             }
         }
     }

@@ -16,7 +16,10 @@ import kotlinx.coroutines.launch
 import org.golfcat.team.project.models.EventWithDetails
 
 @Composable
-fun EventListTab(repository: TeamRepository) {
+fun EventListTab(
+    repository: TeamRepository,
+    onScoringClick: (String) -> Unit
+) {
     val events by repository.events.collectAsState()
     val scope = rememberCoroutineScope()
     var showGuestDialog by remember { mutableStateOf<String?>(null) } // eventId
@@ -44,6 +47,9 @@ fun EventListTab(repository: TeamRepository) {
                     },
                     onAddGuestClick = {
                         showGuestDialog = event.id
+                    },
+                    onScoringClick = {
+                        onScoringClick(event.id)
                     }
                 )
             }
@@ -66,7 +72,8 @@ fun EventListTab(repository: TeamRepository) {
 fun EventCard(
     event: EventWithDetails,
     onJoinClick: () -> Unit,
-    onAddGuestClick: () -> Unit
+    onAddGuestClick: () -> Unit,
+    onScoringClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -118,7 +125,10 @@ fun EventCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text(ResStrings.MENU_SCORING) },
-                            onClick = { showMenu = false /* TODO */ },
+                            onClick = { 
+                                showMenu = false
+                                onScoringClick()
+                            },
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                         )
                         DropdownMenuItem(
