@@ -9,7 +9,7 @@ object AuthManager {
         id = "u1", 
         lineUid = "L1", 
         lineDisplayName = "Tester", 
-        realName = "測試管理員",
+        realName = "Admin Tester", // 💡 英文化
         initialHandicap = 18.0,
         isSuperAdmin = true,
         createdAt = null
