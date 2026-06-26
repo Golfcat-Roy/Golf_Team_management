@@ -11,7 +11,8 @@ kotlin {
     wasmJs {
         browser {
             commonWebpackConfig {
-                outputFileName = "webApp.js"
+                // 💡 統一改為小寫，避免 GitHub Pages 區分大小寫導致的 404
+                outputFileName = "webapp.js"
             }
         }
         binaries.executable()
@@ -20,7 +21,6 @@ kotlin {
     sourceSets {
         val wasmJsMain by getting {
             dependencies {
-                // 💡 移除所有專案依賴，代碼已合併至本地
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
