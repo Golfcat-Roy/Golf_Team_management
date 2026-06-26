@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import org.golfcat.team.project.models.EventWithDetails
 fun EventListTab(repository: TeamRepository) {
     val events by repository.events.collectAsState()
     val scope = rememberCoroutineScope()
+    var showGuestDialog by remember { mutableStateOf<String?>(null) } // eventId
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -26,8 +28,7 @@ fun EventListTab(repository: TeamRepository) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(ResStrings.EVENT_LIST_TITLE, style = MaterialTheme.typography.headlineSmall)
-            // 💡 Admin only (Mocked)
-            IconButton(onClick = { /* TODO */ }) {
+            IconButton(onClick = { /* TODO: Create Event */ }) {
                 Icon(Icons.Default.Add, contentDescription = "Add Event")
             }
         }
@@ -40,18 +41,35 @@ fun EventListTab(repository: TeamRepository) {
                     event = event,
                     onJoinClick = {
                         scope.launch { repository.toggleRegistration(event.id) }
+                    },
+                    onAddGuestClick = {
+                        showGuestDialog = event.id
                     }
                 )
             }
         }
+    }
+
+    // 💡 Guest Registration Dialog
+    if (showGuestDialog != null) {
+        GuestDialog(
+            onDismiss = { showGuestDialog = null },
+            onConfirm = { name, hcp ->
+                println("Add Guest: $name with HCP $hcp to ${showGuestDialog}")
+                showGuestDialog = null
+            }
+        )
     }
 }
 
 @Composable
 fun EventCard(
     event: EventWithDetails,
-    onJoinClick: () -> Unit
+    onJoinClick: () -> Unit,
+    onAddGuestClick: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -67,6 +85,7 @@ fun EventCard(
             IconTextInfo(Icons.Default.Place, event.location ?: "TBD")
             IconTextInfo(Icons.Default.DateRange, "${event.date} ${event.startTime ?: ""}")
             IconTextInfo(Icons.Default.Person, "${ResStrings.EVENT_REGISTERED_COUNT}: ${event.participantCount}")
+            IconTextInfo(Icons.Default.Settings, "${ResStrings.EVENT_RULE}: ${event.handicapRule}")
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -81,16 +100,72 @@ fun EventCard(
                     Text(if (event.isUserRegistered) ResStrings.EVENT_CANCEL_JOIN else ResStrings.EVENT_JOIN)
                 }
                 
-                // 💡 Manage Button (Always visible in Mock)
-                OutlinedButton(
-                    onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(ResStrings.EVENT_MANAGE)
+                IconButton(onClick = onAddGuestClick) {
+                    Icon(Icons.Default.Person, contentDescription = ResStrings.EVENT_GUEST_JOIN)
+                }
+
+                Box {
+                    OutlinedButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.width(100.dp)
+                    ) {
+                        Text(ResStrings.EVENT_MANAGE)
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(ResStrings.MENU_SCORING) },
+                            onClick = { showMenu = false /* TODO */ },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(ResStrings.MENU_GROUPING) },
+                            onClick = { showMenu = false /* TODO */ },
+                            leadingIcon = { Icon(Icons.Default.Face, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(ResStrings.MENU_LEADERBOARD) },
+                            onClick = { showMenu = false /* TODO */ },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(ResStrings.MENU_DELETE) },
+                            onClick = { showMenu = false /* TODO */ },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error)
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+fun GuestDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var hcp by remember { mutableStateOf("36") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(ResStrings.DIALOG_GUEST_TITLE) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(value = name, onValueChange = { name = it }, label = { Text(ResStrings.GUEST_NAME) })
+                TextField(value = hcp, onValueChange = { hcp = it }, label = { Text(ResStrings.GUEST_HCP) })
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name, hcp) }) { Text(ResStrings.CONFIRM) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onDismiss() }) { Text(ResStrings.CANCEL) }
+        }
+    )
 }
 
 @Composable

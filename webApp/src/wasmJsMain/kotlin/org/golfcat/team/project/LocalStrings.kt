@@ -28,10 +28,23 @@ object ResStrings {
     const val EVENT_FEE = "Fee"
     const val EVENT_JOIN = "Join"
     const val EVENT_CANCEL_JOIN = "Cancel Join"
+    const val EVENT_GUEST_JOIN = "Add Guest"
     const val EVENT_MANAGE = "Manage"
     const val EVENT_REGISTERED_COUNT = "Participants"
     const val EVENT_GROUP_COUNT = "Groups"
     const val EVENT_RULE = "HCP Rule"
+
+    // Admin Menu
+    const val MENU_SCORING = "Scoring"
+    const val MENU_GROUPING = "Grouping"
+    const val MENU_LEADERBOARD = "Live Leaderboard"
+    const val MENU_EDIT = "Edit Event"
+    const val MENU_DELETE = "Delete"
+
+    // Dialogs
+    const val DIALOG_GUEST_TITLE = "Guest Registration"
+    const val GUEST_NAME = "Guest Name"
+    const val GUEST_HCP = "Guest HCP"
 
     // Scoring
     const val SCORING_TITLE = "Scoring"
