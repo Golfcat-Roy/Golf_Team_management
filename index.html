@@ -5,10 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Golf Team Management</title>
 
+    <!-- 💡 嘗試預載入中文字型，幫助瀏覽器提供 Fallback -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
     <script>
-        // 💡 檢查瀏覽器是否支援 WasmGC
         if (!('WebAssembly' in window) || !('validate' in WebAssembly) || !WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]))) {
             alert("您的瀏覽器版本不支援 WasmGC。請使用 Chrome 119+、Safari 17.4+ 或 Android WebView 119+。");
         }
@@ -22,11 +26,12 @@
             padding: 0;
             background-color: #ffffff;
             overscroll-behavior: none;
+            /* 💡 指定 CSS 字體 */
+            font-family: 'Noto Sans TC', sans-serif;
         }
     </style>
 </head>
 <body>
-    <!-- 💡 使用預設的 webApp.js -->
     <script src="webApp.js"></script>
 </body>
 </html>
