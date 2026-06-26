@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MainAppShell() {
     var selectedTab by remember { mutableStateOf(0) }
+    // 💡 實例化 Repository 供各分頁使用
+    val repository = remember { TeamRepository() }
     
     val tabs = listOf(
         TabData(ResStrings.TAB_EVENTS, Icons.Default.DateRange),
@@ -48,7 +50,8 @@ fun MainAppShell() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> EventListTabMock()
+                // 💡 使用真實的 EventListTab
+                0 -> EventListTab(repository)
                 else -> PlaceholderTab(tabs[selectedTab].title)
             }
         }
@@ -56,25 +59,6 @@ fun MainAppShell() {
 }
 
 data class TabData(val title: String, val icon: ImageVector)
-
-@Composable
-fun EventListTabMock() {
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text(ResStrings.EVENT_LIST_TITLE, style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("2024 Summer Open", style = MaterialTheme.typography.titleMedium)
-                Text("${ResStrings.EVENT_LOCATION}: Daxi Golf Course")
-                Text("${ResStrings.EVENT_DATE}: 2024-06-25")
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = {}) {
-                    Text(ResStrings.EVENT_JOIN)
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun PlaceholderTab(title: String) {
