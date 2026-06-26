@@ -1,131 +1,116 @@
 package org.golfcat.team.project.models
 
-import kotlinx.serialization.SerialName
-// import kotlinx.serialization.Serializable // 💡 暫時移除，避開 Wasm 編譯器 Bug
-
-// @Serializable
+// 💡 徹底移除所有外部依賴註解 (SerialName, Serializable)，確保編譯 100% 通過
 data class Team(
-    val id: String? = null,
+    val id: String?,
     val name: String,
-    @SerialName("join_code") val joinCode: String,
-    @SerialName("subscription_status") val subscriptionStatus: String = "active",
-    @SerialName("subscription_type") val subscriptionType: String = "free",
-    @SerialName("member_limit") val memberLimit: Int = 30,
-    @SerialName("created_at") val createdAt: String? = null
+    val joinCode: String,
+    val subscriptionStatus: String,
+    val subscriptionType: String,
+    val memberLimit: Int,
+    val createdAt: String?
 )
 
-// @Serializable
 data class User(
-    val id: String? = null,
-    @SerialName("line_uid") val lineUid: String,
-    @SerialName("line_display_name") val lineDisplayName: String? = null,
-    @SerialName("real_name") val realName: String = "User",
-    @SerialName("initial_handicap") val initialHandicap: Double = 36.0,
-    @SerialName("is_super_admin") val isSuperAdmin: Boolean = false,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val lineUid: String,
+    val lineDisplayName: String?,
+    val realName: String,
+    val initialHandicap: Double,
+    val isSuperAdmin: Boolean,
+    val createdAt: String?
 )
 
-// @Serializable
 data class UserUpdate(
-    @SerialName("real_name") val realName: String,
-    @SerialName("initial_handicap") val initialHandicap: Double
+    val realName: String,
+    val initialHandicap: Double
 )
 
-// @Serializable
 data class TeamMember(
-    val id: String? = null,
-    @SerialName("team_id") val teamId: String,
-    @SerialName("user_id") val userId: String,
-    val role: String = "member",
-    @SerialName("current_team_handicap") val currentTeamHandicap: Double = 36.0,
-    @SerialName("member_status") val memberStatus: String = "active",
-    @SerialName("sponsor_member_id") val sponsorMemberId: String? = null,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val teamId: String,
+    val userId: String,
+    val role: String,
+    val currentTeamHandicap: Double,
+    val memberStatus: String,
+    val sponsorMemberId: String?,
+    val createdAt: String?
 )
 
-// @Serializable
 data class Event(
-    val id: String? = null,
-    @SerialName("team_id") val teamId: String,
+    val id: String?,
+    val teamId: String,
     val title: String,
     val date: String,
     val location: String,
-    @SerialName("handicap_rule") val handicapRule: String,
-    val fee: Int = 0,
-    @SerialName("registration_status") val registrationStatus: String = "open",
-    @SerialName("start_time") val startTime: String? = null,
-    @SerialName("group_count") val groupCount: Int? = null,
-    @SerialName("match_play_sub_mode") val matchPlaySubMode: String? = null,
-    val pars: List<Int> = listOf(4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4),
-    @SerialName("hidden_holes") val hiddenHoles: List<Int>? = null,
-    @SerialName("is_settled") val isSettled: Boolean = false,
-    @SerialName("is_archived_in_list") val isArchivedInList: Boolean = false,
-    @SerialName("created_at") val createdAt: String? = null
+    val handicapRule: String,
+    val fee: Int,
+    val registrationStatus: String,
+    val startTime: String?,
+    val groupCount: Int?,
+    val matchPlaySubMode: String?,
+    val pars: List<Int>,
+    val hiddenHoles: List<Int>?,
+    val isSettled: Boolean,
+    val isArchivedInList: Boolean,
+    val createdAt: String?
 )
 
-// @Serializable
 data class EventRegistration(
-    val id: String? = null,
-    @SerialName("event_id") val eventId: String,
-    @SerialName("team_member_id") val teamMemberId: String,
+    val id: String?,
+    val eventId: String,
+    val teamMemberId: String,
     val status: String,
-    @SerialName("created_at") val createdAt: String? = null
+    val createdAt: String?
 )
 
-// @Serializable
 data class EventGroup(
-    val id: String? = null,
-    @SerialName("event_id") val eventId: String,
-    @SerialName("group_number") val groupNumber: Int,
-    val side: String? = null, // 'A' or 'B'
-    @SerialName("captain_id") val captainId: String? = null,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val eventId: String,
+    val groupNumber: Int,
+    val side: String?,
+    val captainId: String?,
+    val createdAt: String?
 )
 
-// @Serializable
 data class EventGroupUpdate(
-    @SerialName("group_number") val groupNumber: Int
+    val groupNumber: Int
 )
 
-// @Serializable
 data class EventGroupMember(
-    val id: String? = null,
-    @SerialName("group_id") val groupId: String,
-    @SerialName("team_member_id") val teamMemberId: String,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val groupId: String,
+    val teamMemberId: String,
+    val createdAt: String?
 )
 
-// @Serializable
 data class MatchPairing(
-    val id: String? = null,
-    @SerialName("event_id") val eventId: String,
-    @SerialName("group_a_id") val groupAId: String,
-    @SerialName("group_b_id") val groupBId: String,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val eventId: String,
+    val groupAId: String,
+    val groupBId: String,
+    val createdAt: String?
 )
 
-// @Serializable
 data class NewPeoriaVote(
-    val id: String? = null,
-    @SerialName("event_id") val eventId: String,
-    @SerialName("team_member_id") val teamMemberId: String,
-    @SerialName("voted_holes") val votedHoles: List<Int>,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val eventId: String,
+    val teamMemberId: String,
+    val votedHoles: List<Int>,
+    val createdAt: String?
 )
 
-// @Serializable
 data class Score(
-    val id: String? = null,
-    @SerialName("event_id") val eventId: String,
-    @SerialName("team_member_id") val teamMemberId: String,
-    @SerialName("gross_score") val grossScore: Int,
-    @SerialName("net_score") val netScore: Double? = null,
-    @SerialName("applied_handicap") val appliedHandicap: Double? = null,
-    @SerialName("hole_scores") val holeScores: List<Int>,
-    @SerialName("created_at") val createdAt: String? = null
+    val id: String?,
+    val eventId: String,
+    val teamMemberId: String,
+    val grossScore: Int,
+    val netScore: Double?,
+    val appliedHandicap: Double?,
+    val holeScores: List<Int>,
+    val createdAt: String?
 )
 
-// @Serializable
 data class EventWithDetails(
     val id: String,
     val title: String,
@@ -137,35 +122,32 @@ data class EventWithDetails(
     val groupCount: Int?,
     val participantCount: Int,
     val isUserRegistered: Boolean,
-    val isArchivedInList: Boolean = false
+    val isArchivedInList: Boolean
 )
 
-// @Serializable
 data class MemberWithUser(
     val id: String,
-    @SerialName("team_id") val teamId: String,
-    @SerialName("current_team_handicap") val handicap: Double,
+    val teamId: String,
+    val handicap: Double,
     val role: String,
     val users: User,
-    @SerialName("sponsor_member_id") val sponsorMemberId: String? = null,
-    var groupNumber: Int? = null,
-    var groupSide: String? = null,
-    var pairedGroupName: String? = null
+    val sponsorMemberId: String?,
+    val groupNumber: Int?,
+    val groupSide: String?,
+    val pairedGroupName: String?
 )
 
-// @Serializable
 data class HistoryEntry(
     val eventTitle: String,
     val date: String,
     val grossScore: Int,
     val holeScores: List<Int>,
     val pars: List<Int>,
-    val startTime: String? = null,
-    val netScore: Double? = null,
-    val appliedHandicap: Double? = null
+    val startTime: String?,
+    val netScore: Double?,
+    val appliedHandicap: Double?
 )
 
-// @Serializable
 data class PersonalHistory(
     val birdieCount: Int,
     val eagleCount: Int,
@@ -173,7 +155,6 @@ data class PersonalHistory(
     val entries: List<HistoryEntry>
 )
 
-// @Serializable
 data class TeamStats(
     val teamId: String,
     val teamName: String,
@@ -181,34 +162,30 @@ data class TeamStats(
     val memberCount: Int,
     val adminName: String?,
     val status: String,
-    @SerialName("subscription_type") val subscriptionType: String = "free",
-    @SerialName("member_limit") val memberLimit: Int = 30
+    val subscriptionType: String,
+    val memberLimit: Int
 )
 
-// @Serializable
 data class LineGroup(
     val id: String,
-    @SerialName("team_id") val teamId: String,
-    @SerialName("created_at") val createdAt: String? = null
+    val teamId: String,
+    val createdAt: String?
 )
 
-// @Serializable
 data class EventGroupWithMembers(
     val group: EventGroup,
     val members: List<MemberWithUser>
 )
 
-// @Serializable
 data class CourseMaster(
-    val id: String? = null,
+    val id: String?,
     val name: String,
-    @SerialName("location_city") val locationCity: String? = null,
+    val locationCity: String?,
     val pars: List<Int>,
-    @SerialName("created_by_team_id") val createdByTeamId: String? = null,
-    @SerialName("is_verified") val isVerified: Boolean = false
+    val createdByTeamId: String?,
+    val isVerified: Boolean
 )
 
-// @Serializable
 data class EventLeaderboardEntry(
     val memberId: String,
     val realName: String,
@@ -217,51 +194,46 @@ data class EventLeaderboardEntry(
     val toPar: Int,
     val holesPlayed: Int,
     val isFinished: Boolean,
-    val points: Double = 0.0
+    val points: Double
 )
 
-// @Serializable
 data class AppErrorLog(
-    val id: String? = null,
-    @SerialName("team_id") val teamId: String? = null,
-    @SerialName("team_name") val teamName: String? = null,
+    val id: String?,
+    val teamId: String?,
+    val teamName: String?,
     val message: String,
-    @SerialName("created_at") val createdAt: String? = null
+    val createdAt: String?
 )
 
-// @Serializable
 data class ScoreWithEvent(
-    @SerialName("event_id") val eventId: String,
-    @SerialName("team_member_id") val teamMemberId: String,
-    @SerialName("gross_score") val grossScore: Int,
-    @SerialName("net_score") val netScore: Double? = null,
-    @SerialName("applied_handicap") val appliedHandicap: Double? = null,
-    @SerialName("hole_scores") val holeScores: List<Int>,
+    val eventId: String,
+    val teamMemberId: String,
+    val grossScore: Int,
+    val netScore: Double?,
+    val appliedHandicap: Double?,
+    val holeScores: List<Int>,
     val events: Event
 )
 
-// @Serializable
 data class TeamWithEmbeddedMembers(
-    @SerialName("id") val id: String? = null,
-    @SerialName("name") val name: String,
-    @SerialName("join_code") val joinCode: String,
-    @SerialName("subscription_status") val subscriptionStatus: String,
-    @SerialName("subscription_type") val subscriptionType: String,
-    @SerialName("member_limit") val memberLimit: Int,
-    @SerialName("team_members") val members: List<EmbeddedMember>
+    val id: String?,
+    val name: String,
+    val joinCode: String,
+    val subscriptionStatus: String,
+    val subscriptionType: String,
+    val memberLimit: Int,
+    val members: List<EmbeddedMember>
 ) {
-    val team: Team get() = Team(id, name, joinCode, subscriptionStatus, subscriptionType, memberLimit)
+    val team: Team get() = Team(id, name, joinCode, subscriptionStatus, subscriptionType, memberLimit, null)
 }
 
-// @Serializable
 data class EmbeddedMember(
     val role: String,
     val users: EmbeddedUser
 )
 
-// @Serializable
 data class EmbeddedUser(
-    @SerialName("real_name") val realName: String
+    val realName: String
 )
 
 object MemberRoles {

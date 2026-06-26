@@ -18,7 +18,7 @@ fun App(repository: TeamRepository = remember { TeamRepository() }) {
         if (currentUser != null) {
             isLoading = true
             // 💡 呼叫我們的 Mock Repository
-            events = repository.getEventsWithDetails("team-1", currentUser!!.id!!)
+            events = repository.getEventsWithDetails("team-1", currentUser?.id ?: "unknown")
             isLoading = false
         }
     }
@@ -32,7 +32,7 @@ fun App(repository: TeamRepository = remember { TeamRepository() }) {
             } else {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "歡迎回來, ${currentUser!!.realName}",
+                        text = "歡迎回來, ${currentUser?.realName ?: "未知用戶"}",
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Spacer(modifier = Modifier.height(16.dp))

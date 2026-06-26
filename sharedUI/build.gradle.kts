@@ -1,19 +1,16 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidMultiplatformLibrary)
-    alias(libs.plugins.composeMultiplatform)
-    alias(libs.plugins.composeCompiler)
+    kotlin("multiplatform")
+    id("com.android.library")
+    id("org.jetbrains.compose")
 }
 
 kotlin {
-    android {
-        namespace = "org.golfcat.team.project.sharedUI"
-        compileSdk = 37
-        minSdk = 24
-        compilerOptions { jvmTarget = JvmTarget.JVM_11 }
+    androidTarget {
+        compilations.all {
+            kotlinOptions { jvmTarget = "11" }
+        }
     }
 
     @OptIn(ExperimentalWasmDsl::class)
@@ -22,25 +19,22 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies {
-            api(projects.sharedLogic)
-            implementation(libs.compose.runtime)
-            implementation(libs.compose.foundation)
-            implementation(libs.compose.material3)
-            implementation(libs.compose.ui)
-            implementation(libs.compose.components.resources)
-            implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.androidx.lifecycle.runtimeCompose)
-            implementation(libs.kotlinx.datetime)
-        }
-        val androidMain by getting {
+        val commonMain by getting {
             dependencies {
-                implementation(libs.compose.uiToolingPreview)
+                api(project(":sharedLogic"))
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(compose.ui)
             }
         }
     }
 }
 
-dependencies {
-    androidRuntimeClasspath(libs.compose.uiTooling)
+android {
+    namespace = "org.golfcat.team.project.sharedUI"
+    compileSdk = 34
+    defaultConfig {
+        minSdk = 24
+    }
 }

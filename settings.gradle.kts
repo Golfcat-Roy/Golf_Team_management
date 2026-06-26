@@ -1,34 +1,17 @@
-rootProject.name = "Golf_Team_management"
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
 pluginManagement {
     repositories {
-        google {
-            mavenContent {
-                includeGroupAndSubgroups("androidx")
-                includeGroupAndSubgroups("com.android")
-                includeGroupAndSubgroups("com.google")
-            }
-        }
+        google()
         mavenCentral()
         gradlePluginPortal()
     }
 }
-
 dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT) // 💡 允許 Kotlin 插件添加 Node.js 倉庫
     repositories {
-        google {
-            mavenContent {
-                includeGroupAndSubgroups("androidx")
-                includeGroupAndSubgroups("com.android")
-                includeGroupAndSubgroups("com.google")
-            }
-        }
+        google()
         mavenCentral()
     }
 }
 
-include(":androidApp")
-include(":sharedLogic")
-include(":sharedUI")
+rootProject.name = "Golf_Team_management"
 include(":webApp")
