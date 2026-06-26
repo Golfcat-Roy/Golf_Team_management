@@ -5,11 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Golf Team Management</title>
 
-    <!-- 💡 加入除錯工具，讓手機上能看到 Console 報錯 -->
+    <!-- 除錯工具 -->
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
     <script>var vConsole = new window.VConsole();</script>
 
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <script>
+        // 💡 檢查瀏覽器是否支援 WasmGC (Kotlin 2.x 必需)
+        if (!('WebAssembly' in window) || !('validate' in WebAssembly) || !WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]))) {
+            alert("您的瀏覽器版本太舊，不支援此應用程式。請使用 Chrome、Safari (iOS 17.4+) 或更新您的手機系統。");
+        }
+    </script>
 
     <style>
         html, body {
@@ -18,12 +25,11 @@
             margin: 0;
             padding: 0;
             background-color: #ffffff;
-            /* 💡 防止拉動網頁導致的空白 */
             overscroll-behavior: none;
         }
     </style>
 </head>
 <body>
-    <script src="webApp.js"></script>
+    <script src="webapp.js"></script>
 </body>
 </html>
