@@ -11,8 +11,8 @@ kotlin {
     wasmJs {
         browser {
             commonWebpackConfig {
-                // 💡 統一改為小寫，避免 GitHub Pages 區分大小寫導致的 404
-                outputFileName = "webapp.js"
+                // 💡 回復為預設值，有時自定義檔名會導致 Wasm 連結失效
+                outputFileName = "webApp.js"
             }
         }
         binaries.executable()
